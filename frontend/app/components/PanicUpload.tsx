@@ -1,25 +1,36 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
+  AlertCircle,
+  ArrowRight,
   CalendarClock,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Download,
   FileSearch,
+  FileText,
+  Pencil,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Upload,
 } from "lucide-react";
-import { parsePDF } from "@/lib/parser/pdfParser";
 import { buildICS, downloadICS } from "@/lib/calendar/ics";
 import { extractDeadlines } from "@/lib/extract/extractor";
 import type { DeadlineCandidate } from "@/lib/extract/models";
+import { parsePDF, type ParsedPDFPage } from "@/lib/parser/pdfParser";
 import { cn } from "@/lib/utils";
 import { Inspector } from "./Inspector";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function normalizeSpace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function formatDate(dateISO: string) {
@@ -45,16 +56,28 @@ function formatDate(dateISO: string) {
   };
 }
 
-function confidenceTone(confidence: number) {
+function confidenceMeta(confidence: number) {
   if (confidence >= 80) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    return {
+      label: "High confidence",
+      detail: "Ready to export",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
   }
 
   if (confidence >= 60) {
-    return "border-sky-200 bg-sky-50 text-sky-700";
+    return {
+      label: "Review",
+      detail: "Quick check recommended",
+      tone: "border-amber-200 bg-amber-50 text-amber-700",
+    };
   }
 
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  return {
+    label: "Unclear",
+    detail: "Needs manual check",
+    tone: "border-rose-200 bg-rose-50 text-rose-700",
+  };
 }
 
 function typeTone(type: DeadlineCandidate["type"]) {
@@ -75,16 +98,83 @@ function typeTone(type: DeadlineCandidate["type"]) {
   }
 }
 
+function isLikelyPDF(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function segmentPreviewText(text: string, maxLength = 260) {
+  const normalized = normalizeSpace(text);
+  if (!normalized) return [];
+
+  const sentences = normalized.match(/[^.!?]+[.!?]?/g) ?? [normalized];
+  const blocks: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    if ((current + sentence).length > maxLength && current) {
+      blocks.push(current.trim());
+      current = sentence;
+    } else {
+      current = `${current} ${sentence}`.trim();
+    }
+  }
+
+  if (current) {
+    blocks.push(current.trim());
+  }
+
+  return blocks;
+}
+
+function evidenceSnippet(candidate: DeadlineCandidate) {
+  return candidate.evidence.context || candidate.evidence.snippet || "No supporting context captured.";
+}
+
+function findPageForIndex(pages: ParsedPDFPage[], index: number) {
+  if (index < 0) return null;
+  return pages.find((page) => index >= page.indexStart && index < page.indexEnd) ?? null;
+}
+
+function addFlag(flags: string[], flag: string) {
+  return flags.includes(flag) ? flags : [...flags, flag];
+}
+
+function matchingNeedle(pageText: string, candidate: DeadlineCandidate | null) {
+  if (!candidate) return null;
+
+  const haystack = normalizeSpace(pageText).toLowerCase();
+  const needles = [
+    candidate.evidence.context,
+    candidate.evidence.matchedDateText,
+    candidate.evidence.snippet,
+  ]
+    .map((value) => normalizeSpace(value || ""))
+    .filter(Boolean);
+
+  for (const needle of needles) {
+    if (haystack.includes(needle.toLowerCase())) {
+      return needle;
+    }
+  }
+
+  return needles[0] ?? null;
+}
+
 export default function PanicUpload() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState("");
   const [pages, setPages] = useState<number | null>(null);
   const [rawText, setRawText] = useState("");
+  const [parsedPages, setParsedPages] = useState<ParsedPDFPage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [lastExport, setLastExport] = useState<{ kind: "ics" | "csv"; count: number } | null>(null);
 
   const [defaultYear, setDefaultYear] = useState<number>(() => new Date().getFullYear());
   const [minConfidence, setMinConfidence] = useState(45);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activePageNumber, setActivePageNumber] = useState<number | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"date-asc" | "date-desc" | "confidence-desc">("date-asc");
 
@@ -92,11 +182,21 @@ export default function PanicUpload() {
   const [manualCandidates, setManualCandidates] = useState<DeadlineCandidate[]>([]);
 
   async function onFileChange(file: File) {
+    if (!isLikelyPDF(file)) {
+      setStatus("Use a syllabus PDF.");
+      return;
+    }
+
     setLoading(true);
-    setStatus("Reading PDF...");
+    setDragActive(false);
+    setLastExport(null);
+    setStatus("Reading syllabus PDF...");
     setPages(null);
     setRawText("");
-    setSelectedId(null);
+    setParsedPages([]);
+    setActiveId(null);
+    setActivePageNumber(null);
+    setInspectorOpen(false);
     setManualEdits({});
     setManualCandidates([]);
 
@@ -104,7 +204,9 @@ export default function PanicUpload() {
       const result = await parsePDF(file);
       setPages(result.metadata.pages);
       setRawText(result.text);
-      setStatus("Ready for review");
+      setParsedPages(result.pages);
+      setActivePageNumber(result.pages[0]?.pageNumber ?? null);
+      setStatus("Triage ready");
     } catch (err) {
       console.error(err);
       setStatus("Could not read this PDF.");
@@ -124,19 +226,24 @@ export default function PanicUpload() {
     }
   }, [rawText, defaultYear]);
 
-  const mergedCandidates: DeadlineCandidate[] = useMemo(() => {
-    const base = [...(extraction?.candidates ?? []), ...manualCandidates];
+  const sourceCandidates = useMemo(
+    () => [...(extraction?.candidates ?? []), ...manualCandidates],
+    [extraction, manualCandidates]
+  );
 
-    return base.map((candidate) => ({
-      ...candidate,
-      ...(manualEdits[candidate.id] ?? {}),
-      evidence: {
-        ...candidate.evidence,
-        ...((manualEdits[candidate.id]?.evidence as Partial<DeadlineCandidate["evidence"]>) ?? {}),
-      },
-      flags: (manualEdits[candidate.id]?.flags as string[] | undefined) ?? candidate.flags,
-    }));
-  }, [extraction, manualCandidates, manualEdits]);
+  const mergedCandidates: DeadlineCandidate[] = useMemo(
+    () =>
+      sourceCandidates.map((candidate) => ({
+        ...candidate,
+        ...(manualEdits[candidate.id] ?? {}),
+        evidence: {
+          ...candidate.evidence,
+          ...((manualEdits[candidate.id]?.evidence as Partial<DeadlineCandidate["evidence"]>) ?? {}),
+        },
+        flags: (manualEdits[candidate.id]?.flags as string[] | undefined) ?? candidate.flags,
+      })),
+    [manualEdits, sourceCandidates]
+  );
 
   const filteredCandidates = useMemo(
     () => mergedCandidates.filter((candidate) => candidate.confidence >= minConfidence),
@@ -153,7 +260,11 @@ export default function PanicUpload() {
     const filtered = !q
       ? visibleCandidates
       : visibleCandidates.filter((candidate) =>
-          [candidate.title, candidate.dateISO, candidate.type].filter(Boolean).join(" ").toLowerCase().includes(q)
+          [candidate.title, candidate.dateISO, candidate.type, evidenceSnippet(candidate)]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
         );
 
     const sorted = [...filtered];
@@ -166,17 +277,100 @@ export default function PanicUpload() {
     return sorted;
   }, [query, sort, visibleCandidates]);
 
-  const selected = useMemo(() => {
-    if (!selectedId) return null;
-    return mergedCandidates.find((candidate) => candidate.id === selectedId) ?? null;
-  }, [mergedCandidates, selectedId]);
+  const candidatePageMap = useMemo(() => {
+    const map = new Map<string, number>();
+
+    mergedCandidates.forEach((candidate) => {
+      if (candidate.flags.includes("manual_entry")) return;
+      const page = findPageForIndex(parsedPages, candidate.evidence.indexStart);
+      if (page) {
+        map.set(candidate.id, page.pageNumber);
+      }
+    });
+
+    return map;
+  }, [mergedCandidates, parsedPages]);
+
+  const pageCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+
+    displayCandidates.forEach((candidate) => {
+      const pageNumber = candidatePageMap.get(candidate.id);
+      if (pageNumber) {
+        counts.set(pageNumber, (counts.get(pageNumber) ?? 0) + 1);
+      }
+    });
+
+    return counts;
+  }, [candidatePageMap, displayCandidates]);
+
+  const activeCandidate = useMemo(() => {
+    if (!activeId) return null;
+    return mergedCandidates.find((candidate) => candidate.id === activeId) ?? null;
+  }, [activeId, mergedCandidates]);
+
+  const originalActiveCandidate = useMemo(() => {
+    if (!activeId) return null;
+    return sourceCandidates.find((candidate) => candidate.id === activeId) ?? null;
+  }, [activeId, sourceCandidates]);
 
   const exportableCandidates = useMemo(
     () => displayCandidates.filter((candidate) => /^\d{4}-\d{2}-\d{2}$/.test(candidate.dateISO) && candidate.confidence >= 0),
     [displayCandidates]
   );
 
-  function updateCandidate(id: string, patch: Partial<DeadlineCandidate>) {
+  const highConfidenceCount = displayCandidates.filter((candidate) => candidate.confidence >= 80).length;
+  const reviewCount = displayCandidates.filter((candidate) => candidate.confidence >= 60 && candidate.confidence < 80).length;
+  const unclearCount = displayCandidates.filter((candidate) => candidate.confidence < 60).length;
+
+  const activePage = useMemo(
+    () => parsedPages.find((page) => page.pageNumber === activePageNumber) ?? null,
+    [activePageNumber, parsedPages]
+  );
+
+  const activeCandidatePageNumber = activeCandidate ? candidatePageMap.get(activeCandidate.id) ?? null : null;
+  const activePageNeedle =
+    activePage && activeCandidatePageNumber === activePage.pageNumber ? matchingNeedle(activePage.text, activeCandidate) : null;
+
+  const pageSegments = useMemo(() => {
+    if (!activePage) return [];
+    return segmentPreviewText(activePage.text, 320);
+  }, [activePage]);
+
+  const pageCandidates = useMemo(() => {
+    if (!activePageNumber) return [];
+    return displayCandidates.filter((candidate) => candidatePageMap.get(candidate.id) === activePageNumber);
+  }, [activePageNumber, candidatePageMap, displayCandidates]);
+
+  useEffect(() => {
+    if (displayCandidates.length === 0) {
+      setActiveId(null);
+      setInspectorOpen(false);
+      return;
+    }
+
+    if (!activeId || !displayCandidates.some((candidate) => candidate.id === activeId)) {
+      setActiveId(displayCandidates[0].id);
+    }
+  }, [activeId, displayCandidates]);
+
+  useEffect(() => {
+    if (parsedPages.length === 0) {
+      setActivePageNumber(null);
+      return;
+    }
+
+    if (!activePageNumber || !parsedPages.some((page) => page.pageNumber === activePageNumber)) {
+      setActivePageNumber(parsedPages[0].pageNumber);
+    }
+  }, [activePageNumber, parsedPages]);
+
+  useEffect(() => {
+    if (!activeCandidatePageNumber) return;
+    setActivePageNumber(activeCandidatePageNumber);
+  }, [activeCandidatePageNumber]);
+
+  const updateCandidate = useCallback((id: string, patch: Partial<DeadlineCandidate>) => {
     setManualEdits((prev) => ({
       ...prev,
       [id]: {
@@ -184,7 +378,7 @@ export default function PanicUpload() {
         ...patch,
       },
     }));
-  }
+  }, []);
 
   function addManualDeadline() {
     const today = new Date().toISOString().slice(0, 10);
@@ -197,47 +391,112 @@ export default function PanicUpload() {
       dateISO: today,
       time24h: undefined,
       confidence: 100,
-      flags: ["manual_entry"],
+      flags: ["manual_entry", "manually_reviewed"],
       evidence: {
         snippet: "Manually added by user",
         context: "",
-        indexStart: 0,
-        indexEnd: 0,
+        indexStart: -1,
+        indexEnd: -1,
         matchedDateText: "",
         matchedKeywords: [],
       },
     };
 
     setManualCandidates((prev) => [...prev, newCandidate]);
-    setSelectedId(id);
+    setActiveId(id);
+    setInspectorOpen(true);
   }
 
-  function removeCandidate(id: string) {
+  const removeCandidate = useCallback((id: string) => {
     setManualCandidates((prev) => prev.filter((candidate) => candidate.id !== id));
     updateCandidate(id, { confidence: -1 });
 
-    if (selectedId === id) {
-      setSelectedId(null);
+    if (activeId === id) {
+      setActiveId(null);
+      setInspectorOpen(false);
     }
-  }
+  }, [activeId, updateCandidate]);
+
+  const markCandidateChecked = useCallback((id: string) => {
+    const candidate = mergedCandidates.find((item) => item.id === id);
+    if (!candidate) return;
+
+    updateCandidate(id, {
+      confidence: Math.max(candidate.confidence, 100),
+      flags: addFlag(candidate.flags, "manually_reviewed"),
+    });
+    setStatus("Marked as checked");
+  }, [mergedCandidates, updateCandidate]);
+
+  useEffect(() => {
+    if (!rawText || displayCandidates.length === 0 || inspectorOpen) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName ?? "";
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tagName)) {
+        return;
+      }
+
+      const lowerKey = event.key.toLowerCase();
+      const activeIndex = displayCandidates.findIndex((candidate) => candidate.id === activeId);
+      const safeIndex = activeIndex === -1 ? 0 : activeIndex;
+
+      if (lowerKey === "j" || event.key === "ArrowDown") {
+        event.preventDefault();
+        const next = displayCandidates[Math.min(displayCandidates.length - 1, safeIndex + 1)];
+        if (next) setActiveId(next.id);
+        return;
+      }
+
+      if (lowerKey === "k" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const prev = displayCandidates[Math.max(0, safeIndex - 1)];
+        if (prev) setActiveId(prev.id);
+        return;
+      }
+
+      if (lowerKey === "e" || event.key === "Enter") {
+        if (activeId) {
+          event.preventDefault();
+          setInspectorOpen(true);
+        }
+        return;
+      }
+
+      if (lowerKey === "a" && activeId) {
+        event.preventDefault();
+        markCandidateChecked(activeId);
+        return;
+      }
+
+      if (lowerKey === "x" && activeId) {
+        event.preventDefault();
+        removeCandidate(activeId);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeId, displayCandidates, inspectorOpen, markCandidateChecked, rawText, removeCandidate]);
 
   function exportICS() {
     if (exportableCandidates.length === 0) return;
     const icsContent = buildICS(exportableCandidates);
     downloadICS("cueforth-deadlines.ics", icsContent);
+    setLastExport({ kind: "ics", count: exportableCandidates.length });
+    setStatus("Calendar file downloaded");
   }
 
   function exportCSV() {
+    if (exportableCandidates.length === 0) return;
+
     const lines = [
       ["title", "type", "dateISO", "time24h", "confidence"].join(","),
       ...exportableCandidates.map((candidate) =>
-        [
-          candidate.title ?? "",
-          candidate.type,
-          candidate.dateISO,
-          candidate.time24h ?? "",
-          String(candidate.confidence),
-        ]
+        [candidate.title ?? "", candidate.type, candidate.dateISO, candidate.time24h ?? "", String(candidate.confidence)]
           .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
       ),
@@ -251,37 +510,81 @@ export default function PanicUpload() {
     anchor.download = "cueforth-deadlines.csv";
     anchor.click();
     URL.revokeObjectURL(url);
+
+    setLastExport({ kind: "csv", count: exportableCandidates.length });
+    setStatus("CSV downloaded");
   }
 
-  const stats = [
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      void onFileChange(file);
+    }
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!dragActive) {
+      setDragActive(true);
+    }
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+
+    setDragActive(false);
+  }
+
+  function handleUploadKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      fileInputRef.current?.click();
+    }
+  }
+
+  function movePage(direction: -1 | 1) {
+    if (!activePageNumber) return;
+    const nextPageNumber = clamp(activePageNumber + direction, 1, parsedPages.length);
+    setActivePageNumber(nextPageNumber);
+  }
+
+  const triageSummary = [
     {
-      label: "Pages parsed",
-      value: pages ? String(pages) : "0",
-      detail: pages ? "Ready to review" : "Upload a syllabus",
+      label: "High confidence",
+      value: String(highConfidenceCount),
+      detail: "Strong enough to export",
+      tone: "text-emerald-700",
     },
     {
-      label: "Visible deadlines",
-      value: String(displayCandidates.length),
-      detail: extraction ? `${extraction.stats.totalDatesFound} dates found` : "No extraction yet",
+      label: "Review",
+      value: String(reviewCount),
+      detail: "Worth one quick check",
+      tone: "text-amber-700",
     },
     {
-      label: "Needs review",
-      value: String(displayCandidates.filter((candidate) => candidate.confidence < 60).length),
-      detail: rawText ? "Low-confidence candidates" : "Manual review stays visible",
+      label: "Unclear",
+      value: String(unclearCount),
+      detail: "Fix before calendar export",
+      tone: "text-rose-700",
     },
   ];
 
   return (
     <div className="app-surface relative overflow-hidden">
-      <div className="border-b border-black/5 px-6 py-6 sm:px-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
+      <div className="border-b border-[#dfd6c8] bg-[#f6f0e7] px-6 py-6 sm:px-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="max-w-3xl">
             <div className="metric-pill">Cueforth · PanicButton</div>
             <h1 className="font-display mt-5 text-4xl leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl">
-              Turn a syllabus into a working calendar.
+              Deadline triage for one course outline.
             </h1>
-            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-              PanicButton surfaces likely deadlines, then lets you review every decision before anything leaves the page.
+            <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
+              Upload the syllabus, move row by row, correct what matters, and leave with a calendar file that feels
+              safe.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -291,6 +594,7 @@ export default function PanicUpload() {
               </button>
               {rawText ? (
                 <button onClick={addManualDeadline} className="action-secondary">
+                  <Pencil className="h-4 w-4" />
                   Add manual entry
                 </button>
               ) : null}
@@ -298,14 +602,37 @@ export default function PanicUpload() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[470px]">
-            {stats.map((stat) => (
-              <div key={stat.label} className="soft-card-muted px-4 py-4">
-                <div className="eyebrow">{stat.label}</div>
-                <div className="mt-3 text-2xl font-semibold text-slate-950">{stat.value}</div>
-                <div className="mt-2 text-sm text-slate-500">{stat.detail}</div>
+          <div className="paper-panel px-5 py-5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="eyebrow">Triage status</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                {pages ? `${pages} pages read` : "Awaiting upload"}
               </div>
-            ))}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {triageSummary.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[18px] border border-[#e6ddd0] bg-[#fbf7f1] px-4 py-3"
+                >
+                  <div className="text-sm font-semibold text-slate-900">{item.label}</div>
+                  <div className={cn("mt-3 text-2xl font-semibold", item.tone)}>{item.value}</div>
+                  <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{item.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            {rawText ? (
+              <div className="mt-4 annotation-note px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Keyboard review</div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
+                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">J/K move</span>
+                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">E edit</span>
+                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">A checked</span>
+                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">X dismiss</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -317,232 +644,557 @@ export default function PanicUpload() {
         className="sr-only"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) onFileChange(file);
+          if (file) {
+            void onFileChange(file);
+          }
         }}
       />
 
       <div className="px-6 py-6 sm:px-8">
         {!rawText ? (
-          <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-            <button
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_320px]">
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => fileInputRef.current?.click()}
-              className="soft-card group relative overflow-hidden p-8 text-left transition-all duration-200 hover:-translate-y-1"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onKeyDown={handleUploadKeyDown}
+              className={cn(
+                "paper-panel ruled-paper relative overflow-hidden border-2 border-[#cdc2b3] px-6 py-7 text-left outline-none transition-all duration-200 sm:px-8 sm:py-8",
+                dragActive && "upload-zone-active"
+              )}
             >
-              <div className="absolute inset-x-10 top-0 h-32 rounded-full bg-sky-200/40 blur-3xl transition-transform duration-300 group-hover:scale-110" />
-              <div className="relative">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-slate-950 text-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]">
-                  <Upload className="h-6 w-6" />
+              <div className="absolute right-6 top-6 rounded-[14px] border border-[#d8cec0] bg-[#f7f1e8] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                Drag or browse
+              </div>
+
+              <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-slate-950 text-white shadow-[0_12px_32px_rgba(24,33,51,0.14)]">
+                <Upload className="h-6 w-6" />
+              </div>
+
+              <div className="mt-8 max-w-2xl">
+                <div className="eyebrow">Emergency upload desk</div>
+                <div className="font-display mt-3 text-5xl leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-6xl">
+                  Drop the course outline here.
                 </div>
-                <div className="mt-6 text-3xl font-semibold text-slate-950">Bring in a syllabus.</div>
                 <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-                  Upload a course PDF and let PanicButton turn dense academic text into a reviewable timeline.
+                  Find assignment, midterm, lab, and exam dates from your syllabus. PanicButton is built for the
+                  moment the document feels larger than your week.
                 </p>
-
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <div className="metric-pill">Private by default</div>
-                  <div className="metric-pill">Review before export</div>
-                  <div className="metric-pill">.ics ready</div>
-                </div>
-
-                <div className="mt-10 inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  Open file picker
-                  <Sparkles className="h-4 w-4 text-sky-600" />
-                </div>
               </div>
-            </button>
 
-            <div className="grid gap-4">
-              <div className="soft-card px-6 py-6">
-                <div className="flex items-center gap-3 text-slate-900">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-                    <FileSearch className="h-5 w-5" />
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {[
+                  "Upload the syllabus PDF.",
+                  "Review surfaced dates with context.",
+                  "Export a calendar that feels safe.",
+                ].map((step, index) => (
+                  <div key={step} className="annotation-note px-4 py-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">0{index + 1}</div>
+                    <div className="mt-3 text-sm font-semibold leading-6 text-slate-900">{step}</div>
                   </div>
-                  <div className="text-lg font-semibold">Readable output, not raw extraction</div>
-                </div>
-                <p className="mt-4 text-sm leading-7 text-slate-600">
-                  Titles, dates, times, and evidence are surfaced in one place so the workflow feels grounded and fast.
-                </p>
+                ))}
               </div>
 
-              <div className="soft-card px-6 py-6">
-                <div className="flex items-center gap-3 text-slate-900">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                    <CalendarClock className="h-5 w-5" />
-                  </div>
-                  <div className="text-lg font-semibold">Calendar export when you are ready</div>
-                </div>
-                <p className="mt-4 text-sm leading-7 text-slate-600">
-                  Keep control of the review step, then export a clean `.ics` file or lightweight CSV.
-                </p>
-              </div>
-
-              <div className="soft-card px-6 py-6">
-                <div className="eyebrow">What PanicButton looks for</div>
+              <div className="mt-8 rounded-[22px] border border-[#e6ddd0] bg-[#fffdfa]/95 px-5 py-5">
+                <div className="eyebrow">Looks for</div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {["Assignments", "Midterms", "Finals", "Labs", "Projects", "Readings"].map((label) => (
-                    <div key={label} className="rounded-full bg-[#f5efe5] px-3 py-2 text-sm font-medium text-slate-700">
+                    <span
+                      key={label}
+                      className="rounded-[999px] border border-[#e2d8ca] bg-[#f7f1e8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700"
+                    >
                       {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 flex items-center gap-2 text-sm font-semibold text-slate-950">
+                Open file picker
+                <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="paper-panel px-5 py-5">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <FileText className="h-4 w-4 text-slate-600" />
+                  Syllabus cues
+                </div>
+                <div className="mt-5 space-y-3">
+                  {[
+                    { date: "Sep 18", text: "Lab 1 due before class begins." },
+                    { date: "Oct 06", text: "Midterm exam covers weeks 1 through 5." },
+                    { date: "Nov 21", text: "Project checkpoint presentation." },
+                  ].map((item) => (
+                    <div key={item.text} className="rounded-[18px] border border-[#e5ddd0] bg-[#fbf7f1] px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 text-sm leading-6 text-slate-700">{item.text}</div>
+                        <div className="rounded-[999px] bg-[#f4d7cf] px-3 py-1.5 text-xs font-semibold text-[#8b3f2f]">
+                          {item.date}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
+
+              <div className="annotation-note px-5 py-5">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <ShieldCheck className="h-4 w-4 text-emerald-700" />
+                  Practical trust
+                </div>
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  The point is not to guess. The point is to surface likely deadlines fast, keep uncertainty visible,
+                  and make correction easy.
+                </p>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="space-y-5">
-            <div className="soft-card px-5 py-5">
-              <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))_160px]">
-                <label className="flex items-center gap-3 field-shell">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search deadlines, types, or dates..."
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                  />
-                </label>
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+            <section className="space-y-4">
+              <div className="paper-panel px-5 py-5">
+                <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))]">
+                  <label className="space-y-2">
+                    <div className="eyebrow">Search</div>
+                    <div className="field-shell flex items-center gap-3">
+                      <Search className="h-4 w-4 text-slate-400" />
+                      <input
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Title, type, date, or snippet"
+                        className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                  </label>
 
-                <label className="flex items-center gap-3 field-shell">
-                  <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                  <select
-                    value={sort}
-                    onChange={(event) => setSort(event.target.value as "date-asc" | "date-desc" | "confidence-desc")}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
-                  >
-                    <option value="date-asc">Date (earliest)</option>
-                    <option value="date-desc">Date (latest)</option>
-                    <option value="confidence-desc">Confidence (high)</option>
-                  </select>
-                </label>
+                  <label className="space-y-2">
+                    <div className="eyebrow">Sort</div>
+                    <div className="relative">
+                      <SlidersHorizontal className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={sort}
+                        onChange={(event) => setSort(event.target.value as "date-asc" | "date-desc" | "confidence-desc")}
+                        className="field-shell-select w-full pl-11"
+                      >
+                        <option value="date-asc">Date (earliest)</option>
+                        <option value="date-desc">Date (latest)</option>
+                        <option value="confidence-desc">Confidence (high)</option>
+                      </select>
+                    </div>
+                  </label>
 
-                <label className="field-shell flex flex-col justify-center gap-2">
-                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    <span>Min confidence</span>
-                    <span>{minConfidence}%</span>
+                  <label className="space-y-2">
+                    <div className="eyebrow">Min confidence</div>
+                    <div className="field-shell">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <span>Threshold</span>
+                        <span>{minConfidence}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={minConfidence}
+                        onChange={(event) => setMinConfidence(clamp(Number(event.target.value), 0, 100))}
+                        className="mt-3 w-full accent-slate-950"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="space-y-2">
+                    <div className="eyebrow">Assumed year</div>
+                    <div className="field-shell flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Year</span>
+                      <input
+                        type="number"
+                        value={defaultYear}
+                        onChange={(event) => setDefaultYear(clamp(Number(event.target.value || defaultYear), 1900, 2100))}
+                        className="w-24 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
+                      />
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {displayCandidates.length === 0 ? (
+                <div className="paper-panel px-8 py-12 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-amber-100 text-amber-700">
+                    <FileSearch className="h-6 w-6" />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={minConfidence}
-                    onChange={(event) => setMinConfidence(clamp(Number(event.target.value), 0, 100))}
-                    className="w-full accent-slate-900"
-                  />
-                </label>
+                  <div className="mt-5 text-2xl font-semibold text-slate-950">No rows match the current filters.</div>
+                  <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
+                    Lower the confidence threshold, widen the search, or add a manual row if the syllabus still has
+                    something important missing.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {displayCandidates.map((candidate) => {
+                    const date = formatDate(candidate.dateISO);
+                    const isActive = activeId === candidate.id;
+                    const confidence = confidenceMeta(candidate.confidence);
+                    const pageNumber = candidatePageMap.get(candidate.id);
 
-                <label className="field-shell flex items-center justify-between gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Assumed year</span>
-                  <input
-                    type="number"
-                    value={defaultYear}
-                    onChange={(event) => setDefaultYear(clamp(Number(event.target.value || defaultYear), 1900, 2100))}
-                    className="w-24 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
-                  />
-                </label>
+                    return (
+                      <div
+                        key={candidate.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveId(candidate.id)}
+                        onFocus={() => setActiveId(candidate.id)}
+                        onKeyDown={(event) => {
+                          const key = event.key.toLowerCase();
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            setActiveId(candidate.id);
+                            setInspectorOpen(true);
+                          } else if (event.key === " ") {
+                            event.preventDefault();
+                            setActiveId(candidate.id);
+                          } else if (key === "a") {
+                            event.preventDefault();
+                            markCandidateChecked(candidate.id);
+                          } else if (key === "x") {
+                            event.preventDefault();
+                            removeCandidate(candidate.id);
+                          } else if (key === "e") {
+                            event.preventDefault();
+                            setActiveId(candidate.id);
+                            setInspectorOpen(true);
+                          }
+                        }}
+                        className={cn("triage-row outline-none", isActive && "triage-row-active")}
+                      >
+                        <div className="grid gap-5 lg:grid-cols-[96px_minmax(0,1fr)_220px]">
+                          <div className="border-b border-[#ece3d7] pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-5">
+                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{date.month}</div>
+                            <div className="font-display mt-2 text-5xl leading-none tracking-[-0.04em] text-slate-950">
+                              {date.day}
+                            </div>
+                            <div className="mt-3 text-xs leading-6 text-slate-500">{date.detail}</div>
+                            {candidate.time24h ? (
+                              <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                                <Clock3 className="h-3.5 w-3.5" />
+                                {candidate.time24h}
+                              </div>
+                            ) : null}
+                            {pageNumber ? (
+                              <div className="mt-3 rounded-[999px] bg-[#eef2f7] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                Page {pageNumber}
+                              </div>
+                            ) : null}
+                          </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-3 xl:justify-start">
-                  <button onClick={exportCSV} disabled={exportableCandidates.length === 0} className="action-secondary disabled:opacity-50">
-                    CSV
-                  </button>
-                  <button onClick={exportICS} disabled={exportableCandidates.length === 0} className="action-primary disabled:opacity-50">
+                          <div className="min-w-0">
+                            <div className="text-xl font-semibold tracking-tight text-slate-950">
+                              {candidate.title || "Untitled deadline"}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <div
+                                className={cn(
+                                  "rounded-[999px] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]",
+                                  typeTone(candidate.type)
+                                )}
+                              >
+                                {candidate.type}
+                              </div>
+                              {candidate.flags.includes("manual_entry") ? (
+                                <div className="rounded-[999px] bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                  Manual
+                                </div>
+                              ) : null}
+                              {candidate.flags.includes("conditional_event") ? (
+                                <div className="rounded-[999px] bg-amber-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                                  Conditional
+                                </div>
+                              ) : null}
+                              {candidate.flags.includes("manually_reviewed") ? (
+                                <div className="rounded-[999px] bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                                  Checked
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-4 rounded-[18px] border border-[#e8dfd3] bg-[#fbf7f1] px-4 py-4">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                Matched in syllabus
+                              </div>
+                              <p className="mt-2 text-sm leading-7 text-slate-700">{evidenceSnippet(candidate)}</p>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                              {candidate.evidence.matchedDateText ? (
+                                <span className="metric-pill">Date text: {candidate.evidence.matchedDateText}</span>
+                              ) : null}
+                              {candidate.evidence.matchedKeywords.map((keyword) => (
+                                <span
+                                  key={keyword}
+                                  className="rounded-[999px] bg-[#edf2fb] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-800"
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-3 lg:items-end">
+                            <div className={cn("confidence-pill", confidence.tone)}>
+                              <span className="h-2 w-2 rounded-full bg-current" />
+                              {confidence.label}
+                            </div>
+                            <div className="text-sm font-semibold text-slate-900">{candidate.confidence}% confidence</div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{confidence.detail}</div>
+
+                            <div className="mt-2 flex flex-wrap gap-2 lg:justify-end">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  markCandidateChecked(candidate.id);
+                                }}
+                                className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-100"
+                              >
+                                A Checked
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setActiveId(candidate.id);
+                                  setInspectorOpen(true);
+                                }}
+                                className="rounded-[14px] border border-[#ddd4c7] bg-[#f7f1e8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#f1eadf]"
+                              >
+                                E Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  removeCandidate(candidate.id);
+                                }}
+                                className="rounded-[14px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-rose-700 transition-colors hover:bg-rose-100"
+                              >
+                                X Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <aside className="space-y-4">
+              <div className={cn("paper-panel px-5 py-5", lastExport?.kind === "ics" && "border-emerald-200 bg-[#f8fcf8]")}>
+                {lastExport ? (
+                  <>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                      Calendar file ready
+                    </div>
+                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
+                      The important dates are out of the document.
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      {lastExport.count} deadline{lastExport.count === 1 ? "" : "s"} exported as{" "}
+                      {lastExport.kind === "ics" ? ".ics" : "CSV"}. Next step: import it into Google Calendar, Apple
+                      Calendar, or Outlook and get this course off your mental stack.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <CalendarClock className="h-4 w-4 text-slate-700" />
+                      Export desk
+                    </div>
+                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
+                      Move reviewed dates into a calendar.
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      {exportableCandidates.length} visible deadline{exportableCandidates.length === 1 ? "" : "s"} are ready to leave the
+                      page. Export `.ics` first if you want the cleanest handoff.
+                    </p>
+                  </>
+                )}
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <button
+                    onClick={exportICS}
+                    disabled={exportableCandidates.length === 0}
+                    className="action-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     <Download className="h-4 w-4" />
                     Export .ics
                   </button>
+                  <button
+                    onClick={exportCSV}
+                    disabled={exportableCandidates.length === 0}
+                    className="action-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Download CSV
+                  </button>
+                </div>
+
+                <div className="mt-5 annotation-note px-4 py-4">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
+                    <div className="text-sm leading-7 text-slate-600">
+                      Export is based on the rows currently visible in triage. Tighten filters first if you want a smaller release.
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {displayCandidates.length === 0 ? (
-              <div className="soft-card px-8 py-12 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-amber-100 text-amber-700">
-                  <FileSearch className="h-6 w-6" />
+              <div className="paper-panel px-5 py-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <FileText className="h-4 w-4 text-slate-700" />
+                    Document viewer
+                  </div>
+                  {activePage ? (
+                    <div className="rounded-[999px] bg-[#eef2f7] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                      Page {activePage.pageNumber}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-5 text-2xl font-semibold text-slate-950">No deadlines match the current filters.</div>
-                <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
-                  Lower the confidence threshold, search less narrowly, or add an item manually if the parser missed something important.
-                </p>
+
+                {parsedPages.length > 0 ? (
+                  <>
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        onClick={() => movePage(-1)}
+                        disabled={!activePageNumber || activePageNumber <= 1}
+                        className="rounded-[14px] border border-[#ddd4c7] bg-[#fffdfa] p-2 text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <div className="flex-1 overflow-x-auto">
+                        <div className="flex gap-2 pb-1">
+                          {parsedPages.map((page) => {
+                            const count = pageCounts.get(page.pageNumber) ?? 0;
+                            const isCurrentPage = activePageNumber === page.pageNumber;
+
+                            return (
+                              <button
+                                key={page.pageNumber}
+                                onClick={() => setActivePageNumber(page.pageNumber)}
+                                className={cn(
+                                  "min-w-fit rounded-[14px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
+                                  isCurrentPage
+                                    ? "border-slate-950 bg-slate-950 text-white"
+                                    : "border-[#ddd4c7] bg-[#fffdfa] text-slate-700 hover:bg-white"
+                                )}
+                              >
+                                Page {page.pageNumber}
+                                {count > 0 ? ` · ${count}` : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => movePage(1)}
+                        disabled={!activePageNumber || activePageNumber >= parsedPages.length}
+                        className="rounded-[14px] border border-[#ddd4c7] bg-[#fffdfa] p-2 text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber ? (
+                      <div className="mt-4 annotation-note px-4 py-4">
+                        <div className="eyebrow">Pinned evidence on this page</div>
+                        <p className="mt-2 text-sm leading-7 text-slate-700">{evidenceSnippet(activeCandidate)}</p>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 max-h-[460px] overflow-y-auto pr-1">
+                      <div className="paper-panel ruled-paper px-4 py-4">
+                        <div className="space-y-3">
+                          {pageSegments.map((segment, index) => {
+                            const isHighlighted =
+                              !!activePageNeedle && normalizeSpace(segment).toLowerCase().includes(activePageNeedle.toLowerCase());
+
+                            return (
+                              <div
+                                key={`${index}-${segment.slice(0, 24)}`}
+                                className={cn(
+                                  "rounded-[16px] border px-4 py-4 text-sm leading-7 transition-colors",
+                                  isHighlighted
+                                    ? "border-[#f0ba75] bg-[#fff1dc] text-slate-900"
+                                    : "border-[#e8dfd3] bg-[#fffdfa]/85 text-slate-700"
+                                )}
+                              >
+                                {segment}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="eyebrow">Rows on this page</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {pageCandidates.length > 0 ? (
+                          pageCandidates.map((candidate) => (
+                            <button
+                              key={candidate.id}
+                              onClick={() => setActiveId(candidate.id)}
+                              className={cn(
+                                "rounded-[999px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
+                                activeId === candidate.id
+                                  ? "border-slate-950 bg-slate-950 text-white"
+                                  : "border-[#ddd4c7] bg-[#fffdfa] text-slate-700 hover:bg-white"
+                              )}
+                            >
+                              {candidate.title}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-sm text-slate-500">No extracted deadlines currently mapped to this page.</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm leading-7 text-slate-600">Upload a document to open the page viewer.</p>
+                )}
               </div>
-            ) : (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {displayCandidates.map((candidate) => {
-                  const date = formatDate(candidate.dateISO);
-                  const isActive = selectedId === candidate.id;
 
-                  return (
-                    <button
-                      key={candidate.id}
-                      onClick={() => setSelectedId(candidate.id)}
-                      className={cn("candidate-card text-left", isActive && "candidate-card-active")}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="eyebrow">{
-                            candidate.flags.includes("manual_entry") ? "Manual entry" : candidate.type
-                          }</div>
-                          <div className="mt-3 text-2xl font-semibold text-slate-950">{candidate.title || "Untitled deadline"}</div>
-                        </div>
-                        <div className={cn("confidence-pill", confidenceTone(candidate.confidence))}>
-                          <span className="h-2 w-2 rounded-full bg-current" />
-                          {candidate.confidence}% match
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex items-end justify-between gap-6">
-                        <div>
-                          <div className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">{date.month}</div>
-                          <div className="font-display mt-1 text-5xl leading-none tracking-[-0.03em] text-slate-950">
-                            {date.day}
-                          </div>
-                          <div className="mt-2 text-sm text-slate-500">{date.detail}</div>
-                        </div>
-
-                        {candidate.time24h ? (
-                          <div className="rounded-2xl bg-[#f5efe5] px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              <Clock3 className="h-3.5 w-3.5" />
-                              Time
-                            </div>
-                            <div className="mt-2 text-base font-semibold text-slate-900">{candidate.time24h}</div>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <div className={cn("rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]", typeTone(candidate.type))}>
-                          {candidate.type}
-                        </div>
-                        {candidate.flags.includes("conditional_event") ? (
-                          <div className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">
-                            Conditional
-                          </div>
-                        ) : null}
-                        {candidate.flags.includes("manual_entry") ? (
-                          <div className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                            Manual
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5 rounded-[22px] border border-[#e6dfd2] bg-[#fbf8f3] px-4 py-4">
-                        <div className="eyebrow">Evidence</div>
-                        <p className="mt-3 max-h-24 overflow-hidden text-sm leading-7 text-slate-600">
-                          {candidate.evidence.snippet}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              {unclearCount > 0 ? (
+                <div className="annotation-note px-5 py-5">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Keep uncertain rows moving</div>
+                      <p className="mt-2 text-sm leading-7 text-slate-600">
+                        Start with the rows marked unclear. The review panel keeps the detected value visible while you
+                        make the correction.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </aside>
           </div>
         )}
       </div>
 
       <Inspector
-        selected={selected}
+        selected={inspectorOpen ? activeCandidate : null}
+        original={inspectorOpen ? originalActiveCandidate : null}
         onUpdate={updateCandidate}
         onRemove={removeCandidate}
-        onClose={() => setSelectedId(null)}
+        onClose={() => setInspectorOpen(false)}
       />
     </div>
   );
