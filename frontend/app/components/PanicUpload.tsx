@@ -80,6 +80,39 @@ function confidenceMeta(confidence: number) {
   };
 }
 
+function confidenceSnippetTone(confidence: number) {
+  if (confidence >= 80) {
+    return "border-emerald-200 border-l-4 border-l-emerald-500 bg-[#f7fbf7]";
+  }
+
+  if (confidence >= 60) {
+    return "border-amber-200 border-l-4 border-l-amber-500 bg-[#fff8eb]";
+  }
+
+  return "border-[#efc4b6] border-l-4 border-l-[#d65e46] bg-[#fff3ee]";
+}
+
+function confidenceCue(confidence: number) {
+  if (confidence >= 80) {
+    return {
+      label: "Safe to export",
+      tone: "text-emerald-700",
+    };
+  }
+
+  if (confidence >= 60) {
+    return {
+      label: "Check once, then keep moving",
+      tone: "text-amber-700",
+    };
+  }
+
+  return {
+    label: "Check source text before export",
+    tone: "text-[#b45309]",
+  };
+}
+
 function typeTone(type: DeadlineCandidate["type"]) {
   switch (type) {
     case "midterm":
@@ -575,19 +608,37 @@ export default function PanicUpload() {
 
   return (
     <div className="app-surface relative overflow-hidden">
-      <div className="border-b border-[#dfd6c8] bg-[#f6f0e7] px-6 py-6 sm:px-8">
+      <div className={cn("border-b border-[#dfd6c8] bg-[#f6f0e7] px-6 sm:px-8", rawText ? "py-4" : "py-6")}>
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="max-w-3xl">
-            <div className="metric-pill">Cueforth · PanicButton</div>
-            <h1 className="font-display mt-5 text-4xl leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="metric-pill">Cueforth · PanicButton</div>
+              {rawText ? (
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Review desk loaded
+                </div>
+              ) : null}
+            </div>
+            <h1
+              className={cn(
+                "font-display leading-tight tracking-[-0.03em] text-slate-950",
+                rawText ? "mt-4 text-3xl sm:text-[2.4rem]" : "mt-5 text-4xl sm:text-5xl"
+              )}
+            >
               Deadline triage for one course outline.
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
-              Upload the syllabus, move row by row, correct what matters, and leave with a calendar file that feels
-              safe.
+            <p
+              className={cn(
+                "max-w-2xl text-slate-600",
+                rawText ? "mt-3 text-sm leading-7 sm:text-base" : "mt-4 text-base leading-8"
+              )}
+            >
+              {rawText
+                ? "Scan the ledger, verify the uncertain rows, and get this course into a calendar without dragging the panic with it."
+                : "Upload the syllabus, move row by row, correct what matters, and leave with a calendar file that feels safe."}
             </p>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className={cn("flex flex-wrap items-center gap-3", rawText ? "mt-4" : "mt-6")}>
               <button onClick={() => fileInputRef.current?.click()} className="action-primary">
                 <Upload className="h-4 w-4" />
                 Upload PDF
@@ -604,7 +655,7 @@ export default function PanicUpload() {
 
           <div className="paper-panel px-5 py-5">
             <div className="flex items-center justify-between gap-4">
-              <div className="eyebrow">Triage status</div>
+              <div className="eyebrow">{rawText ? "Ledger status" : "Triage status"}</div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {pages ? `${pages} pages read` : "Awaiting upload"}
               </div>
@@ -755,9 +806,9 @@ export default function PanicUpload() {
             </div>
           </div>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.28fr)_360px]">
             <section className="space-y-4">
-              <div className="paper-panel px-5 py-5">
+              <div className="paper-panel px-4 py-4">
                 <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))]">
                   <label className="space-y-2">
                     <div className="eyebrow">Search</div>
@@ -833,11 +884,12 @@ export default function PanicUpload() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {displayCandidates.map((candidate) => {
                     const date = formatDate(candidate.dateISO);
                     const isActive = activeId === candidate.id;
                     const confidence = confidenceMeta(candidate.confidence);
+                    const cue = confidenceCue(candidate.confidence);
                     const pageNumber = candidatePageMap.get(candidate.id);
 
                     return (
@@ -868,96 +920,112 @@ export default function PanicUpload() {
                             setInspectorOpen(true);
                           }
                         }}
-                        className={cn("triage-row outline-none", isActive && "triage-row-active")}
+                        className={cn(
+                          "triage-row outline-none",
+                          candidate.confidence < 60 && "border-[#efc4b6] bg-[#fffdf9]",
+                          isActive && "triage-row-active"
+                        )}
                       >
-                        <div className="grid gap-5 lg:grid-cols-[96px_minmax(0,1fr)_220px]">
-                          <div className="border-b border-[#ece3d7] pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-5">
+                        <div className="grid gap-4 lg:grid-cols-[82px_minmax(0,1fr)_188px]">
+                          <div className="border-b border-[#ece3d7] pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
                             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{date.month}</div>
-                            <div className="font-display mt-2 text-5xl leading-none tracking-[-0.04em] text-slate-950">
+                            <div className="font-display mt-1.5 text-4xl leading-none tracking-[-0.04em] text-slate-950">
                               {date.day}
                             </div>
-                            <div className="mt-3 text-xs leading-6 text-slate-500">{date.detail}</div>
+                            <div className="mt-2 text-[11px] leading-5 text-slate-500">{date.detail}</div>
                             {candidate.time24h ? (
-                              <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                              <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
                                 <Clock3 className="h-3.5 w-3.5" />
                                 {candidate.time24h}
                               </div>
                             ) : null}
                             {pageNumber ? (
-                              <div className="mt-3 rounded-[999px] bg-[#eef2f7] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                              <div className="mt-2.5 rounded-[999px] bg-[#eef2f7] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                                 Page {pageNumber}
                               </div>
                             ) : null}
                           </div>
 
                           <div className="min-w-0">
-                            <div className="text-xl font-semibold tracking-tight text-slate-950">
+                            <div className="text-lg font-semibold tracking-tight text-slate-950">
                               {candidate.title || "Untitled deadline"}
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-2.5 flex flex-wrap gap-2">
                               <div
                                 className={cn(
-                                  "rounded-[999px] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]",
+                                  "rounded-[999px] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
                                   typeTone(candidate.type)
                                 )}
                               >
                                 {candidate.type}
                               </div>
                               {candidate.flags.includes("manual_entry") ? (
-                                <div className="rounded-[999px] bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                <div className="rounded-[999px] bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                                   Manual
                                 </div>
                               ) : null}
                               {candidate.flags.includes("conditional_event") ? (
-                                <div className="rounded-[999px] bg-amber-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                                <div className="rounded-[999px] bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
                                   Conditional
                                 </div>
                               ) : null}
                               {candidate.flags.includes("manually_reviewed") ? (
-                                <div className="rounded-[999px] bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                                <div className="rounded-[999px] bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
                                   Checked
                                 </div>
                               ) : null}
                             </div>
 
-                            <div className="mt-4 rounded-[18px] border border-[#e8dfd3] bg-[#fbf7f1] px-4 py-4">
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                Matched in syllabus
+                            <div className={cn("mt-3 rounded-[14px] border px-4 py-3", confidenceSnippetTone(candidate.confidence))}>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                  Matched in syllabus
+                                </div>
+                                <div className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", cue.tone)}>
+                                  {cue.label}
+                                </div>
                               </div>
-                              <p className="mt-2 text-sm leading-7 text-slate-700">{evidenceSnippet(candidate)}</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">{evidenceSnippet(candidate)}</p>
                             </div>
 
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                            <div className="mt-2.5 flex flex-wrap gap-2 text-xs text-slate-500">
                               {candidate.evidence.matchedDateText ? (
-                                <span className="metric-pill">Date text: {candidate.evidence.matchedDateText}</span>
+                                <span className="rounded-[999px] border border-[#ddd4c7] bg-[#f7f1e8] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                  {candidate.evidence.matchedDateText}
+                                </span>
                               ) : null}
-                              {candidate.evidence.matchedKeywords.map((keyword) => (
+                              {candidate.evidence.matchedKeywords.slice(0, 3).map((keyword) => (
                                 <span
                                   key={keyword}
-                                  className="rounded-[999px] bg-[#edf2fb] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-800"
+                                  className="rounded-[999px] bg-[#edf2fb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-800"
                                 >
                                   {keyword}
                                 </span>
                               ))}
+                              {candidate.evidence.matchedKeywords.length > 3 ? (
+                                <span className="rounded-[999px] bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                                  +{candidate.evidence.matchedKeywords.length - 3}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
 
-                          <div className="flex flex-col gap-3 lg:items-end">
+                          <div className="flex flex-col gap-2.5 lg:items-end">
                             <div className={cn("confidence-pill", confidence.tone)}>
                               <span className="h-2 w-2 rounded-full bg-current" />
                               {confidence.label}
                             </div>
-                            <div className="text-sm font-semibold text-slate-900">{candidate.confidence}% confidence</div>
-                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{confidence.detail}</div>
+                            <div className="text-sm font-semibold text-slate-900">{candidate.confidence}%</div>
+                            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{confidence.detail}</div>
 
-                            <div className="mt-2 flex flex-wrap gap-2 lg:justify-end">
+                            <div className="mt-1 flex flex-wrap gap-2 lg:justify-end">
                               <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   markCandidateChecked(candidate.id);
                                 }}
-                                className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-100"
+                                className="rounded-[12px] border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-100"
                               >
                                 A Checked
                               </button>
@@ -968,7 +1036,7 @@ export default function PanicUpload() {
                                   setActiveId(candidate.id);
                                   setInspectorOpen(true);
                                 }}
-                                className="rounded-[14px] border border-[#ddd4c7] bg-[#f7f1e8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#f1eadf]"
+                                className="rounded-[12px] border border-[#ddd4c7] bg-[#f7f1e8] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#f1eadf]"
                               >
                                 E Edit
                               </button>
@@ -978,7 +1046,7 @@ export default function PanicUpload() {
                                   event.stopPropagation();
                                   removeCandidate(candidate.id);
                                 }}
-                                className="rounded-[14px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-rose-700 transition-colors hover:bg-rose-100"
+                                className="rounded-[12px] border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition-colors hover:bg-rose-100"
                               >
                                 X Dismiss
                               </button>
@@ -998,10 +1066,10 @@ export default function PanicUpload() {
                   <>
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                      Calendar file ready
+                      Calendar secured
                     </div>
                     <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      The important dates are out of the document.
+                      The course dates are out of the document now.
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       {lastExport.count} deadline{lastExport.count === 1 ? "" : "s"} exported as{" "}
@@ -1013,10 +1081,10 @@ export default function PanicUpload() {
                   <>
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <CalendarClock className="h-4 w-4 text-slate-700" />
-                      Export desk
+                      Release desk
                     </div>
                     <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      Move reviewed dates into a calendar.
+                      Send the reviewed rows somewhere safe.
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       {exportableCandidates.length} visible deadline{exportableCandidates.length === 1 ? "" : "s"} are ready to leave the
@@ -1057,7 +1125,7 @@ export default function PanicUpload() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <FileText className="h-4 w-4 text-slate-700" />
-                    Document viewer
+                    Course document
                   </div>
                   {activePage ? (
                     <div className="rounded-[999px] bg-[#eef2f7] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
@@ -1109,31 +1177,49 @@ export default function PanicUpload() {
                       </button>
                     </div>
 
-                    {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber ? (
-                      <div className="mt-4 annotation-note px-4 py-4">
-                        <div className="eyebrow">Pinned evidence on this page</div>
-                        <p className="mt-2 text-sm leading-7 text-slate-700">{evidenceSnippet(activeCandidate)}</p>
+                    <div className="mt-4 grid gap-3">
+                      <div className="annotation-note px-4 py-4">
+                        <div className="eyebrow">
+                          {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber
+                            ? "Pinned evidence on this page"
+                            : "Page note"}
+                        </div>
+                        <p className="mt-2 text-sm leading-7 text-slate-700">
+                          {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber
+                            ? evidenceSnippet(activeCandidate)
+                            : pageCandidates.length > 0
+                              ? `${pageCandidates.length} extracted row${pageCandidates.length === 1 ? "" : "s"} currently map to this page.`
+                              : "No extracted deadlines are currently pinned to this page."}
+                        </p>
                       </div>
-                    ) : null}
+                    </div>
 
                     <div className="mt-4 max-h-[460px] overflow-y-auto pr-1">
-                      <div className="paper-panel ruled-paper px-4 py-4">
+                      <div className="document-sheet px-4 py-4">
+                        <div className="pointer-events-none absolute inset-y-0 left-12 w-px bg-[#d9cebe]" />
+                        <div className="pointer-events-none absolute right-4 top-4 rounded-[999px] border border-[#e1d8ca] bg-[#fffdfa] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Extracted page text
+                        </div>
                         <div className="space-y-3">
                           {pageSegments.map((segment, index) => {
                             const isHighlighted =
                               !!activePageNeedle && normalizeSpace(segment).toLowerCase().includes(activePageNeedle.toLowerCase());
 
                             return (
-                              <div
-                                key={`${index}-${segment.slice(0, 24)}`}
-                                className={cn(
-                                  "rounded-[16px] border px-4 py-4 text-sm leading-7 transition-colors",
-                                  isHighlighted
-                                    ? "border-[#f0ba75] bg-[#fff1dc] text-slate-900"
-                                    : "border-[#e8dfd3] bg-[#fffdfa]/85 text-slate-700"
-                                )}
-                              >
-                                {segment}
+                              <div key={`${index}-${segment.slice(0, 24)}`} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3">
+                                <div className="pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  {String(index + 1).padStart(2, "0")}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "rounded-r-[14px] border px-4 py-3 text-sm leading-7 transition-colors",
+                                    isHighlighted
+                                      ? "border-[#f0ba75] bg-[#fff1dc] text-slate-900 shadow-[inset_4px_0_0_0_#f0ba75]"
+                                      : "border-[#e8dfd3] bg-[#fffdfa]/88 text-slate-700"
+                                  )}
+                                >
+                                  {segment}
+                                </div>
                               </div>
                             );
                           })}

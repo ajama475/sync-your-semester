@@ -92,7 +92,7 @@
 }
 
 .paper-panel {
-  @apply rounded-[24px] border border-[#ddd4c7] bg-[#fffdfa] shadow-[0_14px_38px_rgba(24,33,51,0.05)];
+  @apply rounded-[24px] border border-[#ddd4c7] bg-[#fffdfa] shadow-[0_12px_28px_rgba(24,33,51,0.05)];
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 239, 0.96));
 }
 
@@ -153,20 +153,33 @@
 }
 
 .triage-row {
-  @apply relative overflow-hidden rounded-[24px] border border-[#ddd4c7] bg-[#fffdfa] px-5 py-5 shadow-[0_10px_30px_rgba(24,33,51,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_36px_rgba(24,33,51,0.08)];
+  @apply relative overflow-hidden rounded-[18px] border border-[#ddd4c7] bg-[#fffdfa] px-4 py-4 shadow-[0_4px_14px_rgba(24,33,51,0.04)] transition-all duration-200 hover:border-[#cfc4b5] hover:bg-white;
 }
 
 .triage-row::before {
   content: "";
-  @apply absolute left-0 top-0 h-full w-1.5 bg-[#d8cfc2];
+  @apply absolute left-0 top-0 h-full w-1 bg-[#d8cfc2];
 }
 
 .triage-row-active {
-  @apply border-slate-950 shadow-[0_16px_40px_rgba(24,33,51,0.12)];
+  @apply border-slate-950 shadow-[0_10px_24px_rgba(24,33,51,0.08)];
 }
 
 .triage-row-active::before {
   @apply bg-slate-950;
+}
+
+.document-sheet {
+  @apply relative overflow-hidden rounded-[20px] border border-[#d9d0c4] bg-[#fcf8f1];
+  background-image:
+    linear-gradient(180deg, rgba(255, 253, 250, 0.98), rgba(248, 242, 232, 0.97)),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 35px,
+      rgba(173, 188, 211, 0.16) 35px,
+      rgba(173, 188, 211, 0.16) 36px
+    );
 }
 
 .inspector-shell {
