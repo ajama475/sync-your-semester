@@ -1,26 +1,89 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import {
+  CalendarClock,
+  Clock3,
+  Download,
+  FileSearch,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import { parsePDF } from "@/lib/parser/pdfParser";
 import { buildICS, downloadICS } from "@/lib/calendar/ics";
 import { extractDeadlines } from "@/lib/extract/extractor";
 import type { DeadlineCandidate } from "@/lib/extract/models";
+import { cn } from "@/lib/utils";
 import { Inspector } from "./Inspector";
-import { Download, Upload } from "lucide-react";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function formatDate(dateISO: string) {
+  const date = new Date(`${dateISO}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      month: "Date",
+      day: dateISO,
+      detail: "Unrecognized date",
+    };
+  }
+
+  return {
+    month: date.toLocaleDateString("en-US", { month: "short" }),
+    day: date.toLocaleDateString("en-US", { day: "2-digit" }),
+    detail: date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }),
+  };
+}
+
+function confidenceTone(confidence: number) {
+  if (confidence >= 80) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (confidence >= 60) {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function typeTone(type: DeadlineCandidate["type"]) {
+  switch (type) {
+    case "midterm":
+    case "final":
+      return "bg-rose-50 text-rose-700";
+    case "assignment":
+    case "project":
+      return "bg-sky-50 text-sky-700";
+    case "quiz":
+    case "lab":
+      return "bg-emerald-50 text-emerald-700";
+    case "reading":
+      return "bg-amber-50 text-amber-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
 export default function PanicUpload() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
   const [pages, setPages] = useState<number | null>(null);
-  const [rawText, setRawText] = useState<string>("");
+  const [rawText, setRawText] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [defaultYear, setDefaultYear] = useState<number>(() => new Date().getFullYear());
-  const [minConfidence, setMinConfidence] = useState<number>(45);
+  const [minConfidence, setMinConfidence] = useState(45);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"date-asc" | "date-desc" | "confidence-desc">("date-asc");
@@ -30,7 +93,7 @@ export default function PanicUpload() {
 
   async function onFileChange(file: File) {
     setLoading(true);
-    setStatus("Reading PDF…");
+    setStatus("Reading PDF...");
     setPages(null);
     setRawText("");
     setSelectedId(null);
@@ -41,7 +104,7 @@ export default function PanicUpload() {
       const result = await parsePDF(file);
       setPages(result.metadata.pages);
       setRawText(result.text);
-      setStatus("Done");
+      setStatus("Ready for review");
     } catch (err) {
       console.error(err);
       setStatus("Could not read this PDF.");
@@ -52,10 +115,11 @@ export default function PanicUpload() {
 
   const extraction = useMemo(() => {
     if (!rawText) return null;
+
     try {
       return extractDeadlines(rawText, defaultYear);
-    } catch (e) {
-      console.error("Extraction error:", e);
+    } catch (err) {
+      console.error("Extraction error:", err);
       return null;
     }
   }, [rawText, defaultYear]);
@@ -63,29 +127,33 @@ export default function PanicUpload() {
   const mergedCandidates: DeadlineCandidate[] = useMemo(() => {
     const base = [...(extraction?.candidates ?? []), ...manualCandidates];
 
-    return base.map((c) => ({
-      ...c,
-      ...(manualEdits[c.id] ?? {}),
+    return base.map((candidate) => ({
+      ...candidate,
+      ...(manualEdits[candidate.id] ?? {}),
       evidence: {
-        ...c.evidence,
-        ...((manualEdits[c.id]?.evidence as Partial<DeadlineCandidate["evidence"]>) ?? {}),
+        ...candidate.evidence,
+        ...((manualEdits[candidate.id]?.evidence as Partial<DeadlineCandidate["evidence"]>) ?? {}),
       },
-      flags: (manualEdits[c.id]?.flags as string[] | undefined) ?? c.flags,
+      flags: (manualEdits[candidate.id]?.flags as string[] | undefined) ?? candidate.flags,
     }));
   }, [extraction, manualCandidates, manualEdits]);
 
-  const filteredCandidates = useMemo(() => {
-    return mergedCandidates.filter((c) => c.confidence >= minConfidence);
-  }, [mergedCandidates, minConfidence]);
+  const filteredCandidates = useMemo(
+    () => mergedCandidates.filter((candidate) => candidate.confidence >= minConfidence),
+    [mergedCandidates, minConfidence]
+  );
 
-  const visibleCandidates = useMemo(() => filteredCandidates.filter((c) => c.confidence >= 0), [filteredCandidates]);
+  const visibleCandidates = useMemo(
+    () => filteredCandidates.filter((candidate) => candidate.confidence >= 0),
+    [filteredCandidates]
+  );
 
   const displayCandidates = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = !q
       ? visibleCandidates
-      : visibleCandidates.filter((c) =>
-          [c.title, c.dateISO, c.type].filter(Boolean).join(" ").toLowerCase().includes(q)
+      : visibleCandidates.filter((candidate) =>
+          [candidate.title, candidate.dateISO, candidate.type].filter(Boolean).join(" ").toLowerCase().includes(q)
         );
 
     const sorted = [...filtered];
@@ -96,15 +164,15 @@ export default function PanicUpload() {
     });
 
     return sorted;
-  }, [visibleCandidates, query, sort]);
+  }, [query, sort, visibleCandidates]);
 
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    return mergedCandidates.find((c) => c.id === selectedId) ?? null;
+    return mergedCandidates.find((candidate) => candidate.id === selectedId) ?? null;
   }, [mergedCandidates, selectedId]);
 
   const exportableCandidates = useMemo(
-    () => displayCandidates.filter((c) => /^\d{4}-\d{2}-\d{2}$/.test(c.dateISO) && c.confidence >= 0),
+    () => displayCandidates.filter((candidate) => /^\d{4}-\d{2}-\d{2}$/.test(candidate.dateISO) && candidate.confidence >= 0),
     [displayCandidates]
   );
 
@@ -145,9 +213,12 @@ export default function PanicUpload() {
   }
 
   function removeCandidate(id: string) {
-    setManualCandidates((prev) => prev.filter((c) => c.id !== id));
+    setManualCandidates((prev) => prev.filter((candidate) => candidate.id !== id));
     updateCandidate(id, { confidence: -1 });
-    if (selectedId === id) setSelectedId(null);
+
+    if (selectedId === id) {
+      setSelectedId(null);
+    }
   }
 
   function exportICS() {
@@ -159,150 +230,83 @@ export default function PanicUpload() {
   function exportCSV() {
     const lines = [
       ["title", "type", "dateISO", "time24h", "confidence"].join(","),
-      ...exportableCandidates.map((c) =>
+      ...exportableCandidates.map((candidate) =>
         [
-          c.title ?? "",
-          c.type,
-          c.dateISO,
-          c.time24h ?? "",
-          String(c.confidence),
+          candidate.title ?? "",
+          candidate.type,
+          candidate.dateISO,
+          candidate.time24h ?? "",
+          String(candidate.confidence),
         ]
-          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
           .join(",")
       ),
     ];
+
     const csv = lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "cueforth-deadlines.csv";
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "cueforth-deadlines.csv";
+    anchor.click();
     URL.revokeObjectURL(url);
   }
 
+  const stats = [
+    {
+      label: "Pages parsed",
+      value: pages ? String(pages) : "0",
+      detail: pages ? "Ready to review" : "Upload a syllabus",
+    },
+    {
+      label: "Visible deadlines",
+      value: String(displayCandidates.length),
+      detail: extraction ? `${extraction.stats.totalDatesFound} dates found` : "No extraction yet",
+    },
+    {
+      label: "Needs review",
+      value: String(displayCandidates.filter((candidate) => candidate.confidence < 60).length),
+      detail: rawText ? "Low-confidence candidates" : "Manual review stays visible",
+    },
+  ];
+
   return (
-    <div
-      className="relative rounded-2xl border border-zinc-800 bg-[#0b1120]"
-      style={{
-        border: "1px solid #1f2937",
-        borderRadius: 18,
-        background: "#0b1120",
-      }}
-    >
-      <div
-        className="flex flex-wrap items-start justify-between gap-4 p-6"
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          gap: 16,
-          justifyContent: "space-between",
-          padding: "20px 24px",
-        }}
-      >
-        <div className="min-w-[280px] flex-1" style={{ flex: "1 1 280px", minWidth: 280 }}>
-          <div
-            className="text-xs uppercase tracking-[0.22em] text-zinc-500"
-            style={{ color: "#94a3b8", fontSize: 12, letterSpacing: "0.22em", textTransform: "uppercase" }}
-          >
-            Cueforth
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-100" style={{ marginTop: 8, color: "#f3f4f6", fontSize: 28, fontWeight: 600 }}>
-            PanicButton
-          </div>
-          <div className="mt-1 text-sm text-zinc-400" style={{ marginTop: 4, color: "#9ca3af", fontSize: 14 }}>
-            Syllabus intake and deadline review
-          </div>
+    <div className="app-surface relative overflow-hidden">
+      <div className="border-b border-black/5 px-6 py-6 sm:px-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="metric-pill">Cueforth · PanicButton</div>
+            <h1 className="font-display mt-5 text-4xl leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl">
+              Turn a syllabus into a working calendar.
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
+              PanicButton surfaces likely deadlines, then lets you review every decision before anything leaves the page.
+            </p>
 
-          <div
-            className="mt-5 flex flex-wrap items-center gap-3"
-            style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 20 }}
-          >
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-lg font-semibold text-white transition-colors hover:bg-blue-400"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                borderRadius: 12,
-                border: "none",
-                background: "#3b82f6",
-                color: "#ffffff",
-                padding: "10px 18px",
-                fontSize: 16,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              <Upload className="h-5 w-5" />
-              Upload PDF
-            </button>
-
-            {rawText && (
-              <button
-                onClick={addManualDeadline}
-                className="rounded-xl border border-zinc-700 px-4 py-3 text-sm text-zinc-200 transition-colors hover:bg-zinc-800"
-                style={{
-                  borderRadius: 12,
-                  border: "1px solid #374151",
-                  background: "transparent",
-                  color: "#d1d5db",
-                  padding: "12px 16px",
-                  fontSize: 14,
-                  cursor: "pointer",
-                }}
-              >
-                + Manual
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button onClick={() => fileInputRef.current?.click()} className="action-primary">
+                <Upload className="h-4 w-4" />
+                Upload PDF
               </button>
-            )}
+              {rawText ? (
+                <button onClick={addManualDeadline} className="action-secondary">
+                  Add manual entry
+                </button>
+              ) : null}
+              {status ? <div className="metric-pill">{loading ? "Processing" : status}</div> : null}
+            </div>
           </div>
-        </div>
 
-        <div
-          className="flex items-center gap-3"
-          style={{ display: "flex", alignItems: "center", gap: 12 }}
-        >
-          <button
-            onClick={exportCSV}
-            disabled={exportableCandidates.length === 0}
-            className="rounded-xl border border-zinc-700 bg-transparent px-4 py-3 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600"
-            style={{
-              borderRadius: 12,
-              border: "1px solid #374151",
-              background: "transparent",
-              color: exportableCandidates.length === 0 ? "#4b5563" : "#d1d5db",
-              padding: "10px 16px",
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: exportableCandidates.length === 0 ? "not-allowed" : "pointer",
-            }}
-          >
-            CSV
-          </button>
-
-          <button
-            onClick={exportICS}
-            disabled={exportableCandidates.length === 0}
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-transparent px-6 py-3 text-lg font-semibold text-zinc-100 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-              borderRadius: 14,
-              border: "1px solid #374151",
-              background: "transparent",
-              color: exportableCandidates.length === 0 ? "#4b5563" : "#e5e7eb",
-              padding: "10px 18px",
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: exportableCandidates.length === 0 ? "not-allowed" : "pointer",
-            }}
-          >
-            <Download className="h-5 w-5" />
-            Export .ics
-          </button>
+          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[470px]">
+            {stats.map((stat) => (
+              <div key={stat.label} className="soft-card-muted px-4 py-4">
+                <div className="eyebrow">{stat.label}</div>
+                <div className="mt-3 text-2xl font-semibold text-slate-950">{stat.value}</div>
+                <div className="mt-2 text-sm text-slate-500">{stat.detail}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -311,210 +315,229 @@ export default function PanicUpload() {
         type="file"
         accept="application/pdf"
         className="sr-only"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
+        onChange={(event) => {
+          const file = event.target.files?.[0];
           if (file) onFileChange(file);
         }}
       />
 
-      <div className="min-h-[70vh] p-6" style={{ minHeight: "72vh", padding: 24 }}>
+      <div className="px-6 py-6 sm:px-8">
         {!rawText ? (
-          <div
-            className="flex h-[60vh] flex-col items-center justify-center text-center"
-            style={{
-              height: "60vh",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-            }}
-          >
-            <div
-              className="mb-4 rounded-full border border-zinc-700 px-4 py-1 text-xs uppercase tracking-[0.24em] text-zinc-400"
-              style={{
-                marginBottom: 16,
-                borderRadius: 9999,
-                border: "1px solid #374151",
-                color: "#9ca3af",
-                padding: "6px 14px",
-                fontSize: 12,
-                letterSpacing: "0.24em",
-                textTransform: "uppercase",
-              }}
+          <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="soft-card group relative overflow-hidden p-8 text-left transition-all duration-200 hover:-translate-y-1"
             >
-              By Cueforth
+              <div className="absolute inset-x-10 top-0 h-32 rounded-full bg-sky-200/40 blur-3xl transition-transform duration-300 group-hover:scale-110" />
+              <div className="relative">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-slate-950 text-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]">
+                  <Upload className="h-6 w-6" />
+                </div>
+                <div className="mt-6 text-3xl font-semibold text-slate-950">Bring in a syllabus.</div>
+                <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
+                  Upload a course PDF and let PanicButton turn dense academic text into a reviewable timeline.
+                </p>
+
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <div className="metric-pill">Private by default</div>
+                  <div className="metric-pill">Review before export</div>
+                  <div className="metric-pill">.ics ready</div>
+                </div>
+
+                <div className="mt-10 inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  Open file picker
+                  <Sparkles className="h-4 w-4 text-sky-600" />
+                </div>
+              </div>
+            </button>
+
+            <div className="grid gap-4">
+              <div className="soft-card px-6 py-6">
+                <div className="flex items-center gap-3 text-slate-900">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                    <FileSearch className="h-5 w-5" />
+                  </div>
+                  <div className="text-lg font-semibold">Readable output, not raw extraction</div>
+                </div>
+                <p className="mt-4 text-sm leading-7 text-slate-600">
+                  Titles, dates, times, and evidence are surfaced in one place so the workflow feels grounded and fast.
+                </p>
+              </div>
+
+              <div className="soft-card px-6 py-6">
+                <div className="flex items-center gap-3 text-slate-900">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                    <CalendarClock className="h-5 w-5" />
+                  </div>
+                  <div className="text-lg font-semibold">Calendar export when you are ready</div>
+                </div>
+                <p className="mt-4 text-sm leading-7 text-slate-600">
+                  Keep control of the review step, then export a clean `.ics` file or lightweight CSV.
+                </p>
+              </div>
+
+              <div className="soft-card px-6 py-6">
+                <div className="eyebrow">What PanicButton looks for</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {["Assignments", "Midterms", "Finals", "Labs", "Projects", "Readings"].map((label) => (
+                    <div key={label} className="rounded-full bg-[#f5efe5] px-3 py-2 text-sm font-medium text-slate-700">
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <h2 className="text-6xl font-bold text-zinc-100" style={{ color: "#e5e7eb", fontSize: 72, fontWeight: 700 }}>
-              PanicButton
-            </h2>
-            <p
-              style={{
-                marginTop: 12,
-                maxWidth: 860,
-                color: "#a5b4c9",
-                fontSize: 22,
-                lineHeight: 1.45,
-              }}
-            >
-              Turn a syllabus into reviewable deadlines with PanicButton.
-              You stay in control before exporting anything.
-            </p>
-            {(loading || status) && (
-              <p className="mt-3 text-3xl text-zinc-400" style={{ marginTop: 12, color: "#8fa3bd", fontSize: 28 }}>
-                {loading ? "Reading PDF..." : status}
-              </p>
-            )}
           </div>
         ) : (
-          <div className="space-y-4">
-            <div
-              className="flex flex-wrap gap-2"
-              style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}
-            >
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search deadlines..."
-                className="w-64 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-500"
-                style={{
-                  width: 300,
-                  borderRadius: 8,
-                  border: "1px solid #374151",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  padding: "10px 12px",
-                  fontSize: 14,
-                }}
-              />
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as "date-asc" | "date-desc" | "confidence-desc")}
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none"
-                style={{
-                  borderRadius: 8,
-                  border: "1px solid #374151",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  padding: "10px 12px",
-                  fontSize: 14,
-                }}
-              >
-                <option value="date-asc">Date (earliest)</option>
-                <option value="date-desc">Date (latest)</option>
-                <option value="confidence-desc">Confidence (high)</option>
-              </select>
-              <label
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
-                style={{
-                  borderRadius: 8,
-                  border: "1px solid #374151",
-                  background: "#111827",
-                  color: "#d1d5db",
-                  padding: "10px 12px",
-                  fontSize: 14,
-                }}
-              >
-                Min confidence: {minConfidence}%
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={minConfidence}
-                onChange={(e) => setMinConfidence(clamp(Number(e.target.value), 0, 100))}
-                className="w-40 accent-blue-500"
-                style={{ width: 180 }}
-              />
-              <input
-                type="number"
-                value={defaultYear}
-                onChange={(e) => setDefaultYear(clamp(Number(e.target.value || defaultYear), 1900, 2100))}
-                className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none"
-                style={{
-                  width: 140,
-                  borderRadius: 8,
-                  border: "1px solid #374151",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  padding: "10px 12px",
-                  fontSize: 14,
-                }}
-              />
+          <div className="space-y-5">
+            <div className="soft-card px-5 py-5">
+              <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))_160px]">
+                <label className="flex items-center gap-3 field-shell">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search deadlines, types, or dates..."
+                    className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                  />
+                </label>
+
+                <label className="flex items-center gap-3 field-shell">
+                  <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+                  <select
+                    value={sort}
+                    onChange={(event) => setSort(event.target.value as "date-asc" | "date-desc" | "confidence-desc")}
+                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
+                  >
+                    <option value="date-asc">Date (earliest)</option>
+                    <option value="date-desc">Date (latest)</option>
+                    <option value="confidence-desc">Confidence (high)</option>
+                  </select>
+                </label>
+
+                <label className="field-shell flex flex-col justify-center gap-2">
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    <span>Min confidence</span>
+                    <span>{minConfidence}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={minConfidence}
+                    onChange={(event) => setMinConfidence(clamp(Number(event.target.value), 0, 100))}
+                    className="w-full accent-slate-900"
+                  />
+                </label>
+
+                <label className="field-shell flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Assumed year</span>
+                  <input
+                    type="number"
+                    value={defaultYear}
+                    onChange={(event) => setDefaultYear(clamp(Number(event.target.value || defaultYear), 1900, 2100))}
+                    className="w-24 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                </label>
+
+                <div className="flex flex-wrap items-center justify-end gap-3 xl:justify-start">
+                  <button onClick={exportCSV} disabled={exportableCandidates.length === 0} className="action-secondary disabled:opacity-50">
+                    CSV
+                  </button>
+                  <button onClick={exportICS} disabled={exportableCandidates.length === 0} className="action-primary disabled:opacity-50">
+                    <Download className="h-4 w-4" />
+                    Export .ics
+                  </button>
+                </div>
+              </div>
             </div>
 
             {displayCandidates.length === 0 ? (
-              <div
-                className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-8 text-center text-zinc-500"
-                style={{
-                  borderRadius: 12,
-                  border: "1px dashed #374151",
-                  background: "rgba(17,24,39,0.5)",
-                  color: "#6b7280",
-                  padding: 24,
-                  textAlign: "center",
-                }}
-              >
-                No deadlines matched current filters.
+              <div className="soft-card px-8 py-12 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-amber-100 text-amber-700">
+                  <FileSearch className="h-6 w-6" />
+                </div>
+                <div className="mt-5 text-2xl font-semibold text-slate-950">No deadlines match the current filters.</div>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
+                  Lower the confidence threshold, search less narrowly, or add an item manually if the parser missed something important.
+                </p>
               </div>
             ) : (
-              <div
-                className="grid grid-cols-1 gap-4 md:grid-cols-2"
-                style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}
-              >
-                {displayCandidates.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedId(c.id)}
-                    className={`rounded-xl border p-4 text-left transition ${
-                      selectedId === c.id
-                        ? "border-blue-400/60 bg-zinc-800"
-                        : "border-zinc-700 bg-zinc-900/70 hover:bg-zinc-800/80"
-                    }`}
-                    style={{
-                      borderRadius: 12,
-                      border: selectedId === c.id ? "1px solid rgba(96,165,250,0.7)" : "1px solid #374151",
-                      background: selectedId === c.id ? "#1f2937" : "rgba(17,24,39,0.75)",
-                      padding: 16,
-                      textAlign: "left",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div className="mb-2 text-sm font-semibold text-zinc-100" style={{ marginBottom: 8, color: "#f3f4f6", fontSize: 16, fontWeight: 600 }}>
-                      {c.title || "Untitled"}
-                    </div>
-                    <div className="text-xs text-zinc-400" style={{ color: "#9ca3af", fontSize: 13 }}>{c.type}</div>
-                    <div className="mt-3 flex items-center justify-between" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span className="font-mono text-sm text-zinc-200" style={{ color: "#e5e7eb", fontSize: 15 }}>{c.dateISO}</span>
-                      <span
-                        className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
-                        style={{
-                          borderRadius: 8,
-                          border: "1px solid #374151",
-                          background: "#1f2937",
-                          color: "#d1d5db",
-                          padding: "4px 8px",
-                          fontSize: 12,
-                        }}
-                      >
-                        {c.confidence}% match
-                      </span>
-                    </div>
-                    {pages !== null && (
-                      <div className="mt-2 text-[11px] text-zinc-500" style={{ marginTop: 8, color: "#6b7280", fontSize: 11 }}>
-                        {status === "Done" ? `${pages} pages parsed` : status}
+              <div className="grid gap-4 xl:grid-cols-2">
+                {displayCandidates.map((candidate) => {
+                  const date = formatDate(candidate.dateISO);
+                  const isActive = selectedId === candidate.id;
+
+                  return (
+                    <button
+                      key={candidate.id}
+                      onClick={() => setSelectedId(candidate.id)}
+                      className={cn("candidate-card text-left", isActive && "candidate-card-active")}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="eyebrow">{
+                            candidate.flags.includes("manual_entry") ? "Manual entry" : candidate.type
+                          }</div>
+                          <div className="mt-3 text-2xl font-semibold text-slate-950">{candidate.title || "Untitled deadline"}</div>
+                        </div>
+                        <div className={cn("confidence-pill", confidenceTone(candidate.confidence))}>
+                          <span className="h-2 w-2 rounded-full bg-current" />
+                          {candidate.confidence}% match
+                        </div>
                       </div>
-                    )}
-                  </button>
-                ))}
+
+                      <div className="mt-6 flex items-end justify-between gap-6">
+                        <div>
+                          <div className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">{date.month}</div>
+                          <div className="font-display mt-1 text-5xl leading-none tracking-[-0.03em] text-slate-950">
+                            {date.day}
+                          </div>
+                          <div className="mt-2 text-sm text-slate-500">{date.detail}</div>
+                        </div>
+
+                        {candidate.time24h ? (
+                          <div className="rounded-2xl bg-[#f5efe5] px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              <Clock3 className="h-3.5 w-3.5" />
+                              Time
+                            </div>
+                            <div className="mt-2 text-base font-semibold text-slate-900">{candidate.time24h}</div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <div className={cn("rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]", typeTone(candidate.type))}>
+                          {candidate.type}
+                        </div>
+                        {candidate.flags.includes("conditional_event") ? (
+                          <div className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">
+                            Conditional
+                          </div>
+                        ) : null}
+                        {candidate.flags.includes("manual_entry") ? (
+                          <div className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                            Manual
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-5 rounded-[22px] border border-[#e6dfd2] bg-[#fbf8f3] px-4 py-4">
+                        <div className="eyebrow">Evidence</div>
+                        <p className="mt-3 max-h-24 overflow-hidden text-sm leading-7 text-slate-600">
+                          {candidate.evidence.snippet}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Detail Overlay / Inspector */}
       <Inspector
         selected={selected}
         onUpdate={updateCandidate}

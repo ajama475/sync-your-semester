@@ -1,10 +1,7 @@
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="min-h-screen bg-zinc-950 text-zinc-100"
-      style={{ minHeight: "100vh", background: "#0a0f1c", color: "#f3f4f6" }}
-    >
-      <main className="mx-auto max-w-[1500px] p-6" style={{ margin: "0 auto", maxWidth: 1500, padding: 8 }}>
+    <div className="min-h-screen px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl">
         {children}
       </main>
     </div>

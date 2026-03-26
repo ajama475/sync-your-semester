@@ -1,10 +1,17 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 
-const inter = Inter({
+const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
+  variable: "--font-sans",
+});
+
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
 });
 
 export const metadata: Metadata = {
@@ -16,8 +23,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="h-full">
       <body
-        className={`${inter.className} h-full bg-background text-foreground`}
-        style={{ minHeight: "100%", background: "#0a0f1c", color: "#f3f4f6" }}
+        className={`${plusJakartaSans.variable} ${newsreader.variable} h-full bg-background text-foreground antialiased`}
+        style={{ minHeight: "100%" }}
       >
         {children}
       </body>

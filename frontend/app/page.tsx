@@ -1,25 +1,48 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import {
+  ArrowRight,
+  CalendarClock,
+  Grid2x2Plus,
+  ShieldCheck,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
 
 const pillars = [
   {
-    title: "Extract Signal",
-    description: "Start with PanicButton to turn a syllabus into reviewable deadlines, dates, and time cues.",
+    icon: ShieldCheck,
+    title: "Reviewable by design",
+    description: "Deadlines are surfaced with evidence and context, so the product feels reliable instead of magical.",
   },
   {
-    title: "Review With Proof",
-    description: "Keep students in control with evidence-backed extraction instead of opaque calendar guesses.",
+    icon: Sparkles,
+    title: "Calm under pressure",
+    description: "The experience is built for the exact moment students need clarity most, without adding more noise.",
   },
   {
-    title: "Move Forward",
-    description: "Export the events that matter and build toward a broader semester planning workflow.",
+    icon: Grid2x2Plus,
+    title: "Structured to expand",
+    description: "Cueforth starts with syllabi, then grows into reminders, workload visibility, and semester planning.",
   },
 ];
 
 const steps = [
   "Upload a syllabus or course document.",
-  "PanicButton surfaces likely deadlines and timing signals.",
-  "Review, correct, and export what matters.",
+  "PanicButton surfaces deadlines, dates, and timing signals.",
+  "Review what matters and export a working plan.",
+];
+
+const previewItems = [
+  { title: "Assignment 3", date: "Mar 31", tone: "bg-sky-100 text-sky-700" },
+  { title: "Midterm review", date: "Apr 2", tone: "bg-emerald-100 text-emerald-700" },
+  { title: "Final project brief", date: "Apr 7", tone: "bg-amber-100 text-amber-700" },
+];
+
+const metrics = [
+  { label: "Workflow", value: "PanicButton" },
+  { label: "Model", value: "Review-first" },
+  { label: "Export", value: ".ics + CSV" },
 ];
 
 export const metadata: Metadata = {
@@ -29,274 +52,171 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <main
-      className="min-h-screen bg-zinc-950 text-zinc-100"
-      style={{ minHeight: "100vh", background: "#0a0f1c", color: "#f3f4f6" }}
-    >
-      <section className="px-6 pb-12 pt-8" style={{ padding: "32px 24px 48px" }}>
-        <div className="mx-auto max-w-6xl" style={{ margin: "0 auto", maxWidth: 1152 }}>
-          <div
-            className="rounded-[28px] border border-zinc-800 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_40%),linear-gradient(180deg,_rgba(15,23,42,0.96),_rgba(10,15,28,1))] p-8 shadow-2xl shadow-black/30"
-            style={{
-              border: "1px solid #1f2937",
-              borderRadius: 28,
-              background:
-                "radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 40%), linear-gradient(180deg, rgba(15,23,42,0.96), rgba(10,15,28,1))",
-              padding: 32,
-              boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
-            }}
-          >
-            <div
-              className="mb-10 flex items-center justify-between gap-4 text-sm text-zinc-400"
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 40 }}
-            >
-              <div
-                className="rounded-full border border-zinc-700 px-4 py-2 uppercase tracking-[0.22em]"
-                style={{
-                  border: "1px solid #374151",
-                  borderRadius: 9999,
-                  padding: "8px 14px",
-                  fontSize: 12,
-                  letterSpacing: "0.22em",
-                  textTransform: "uppercase",
-                  color: "#9ca3af",
-                }}
-              >
-                Cueforth
-              </div>
-              <div style={{ color: "#94a3b8" }}>PanicButton by Cueforth</div>
+    <main className="min-h-screen px-4 pb-16 pt-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <header className="ambient-shell flex items-center justify-between rounded-[28px] px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)]">
+              C
             </div>
-
-            <div className="grid gap-12 lg:grid-cols-[1.25fr_0.75fr]" style={{ display: "grid", gap: 48 }}>
-              <div>
-                <p
-                  className="mb-4 text-sm uppercase tracking-[0.24em] text-blue-300"
-                  style={{ marginBottom: 16, color: "#93c5fd", fontSize: 12, letterSpacing: "0.24em", textTransform: "uppercase" }}
-                >
-                  Find what matters next
-                </p>
-                <h1
-                  className="max-w-3xl text-5xl font-semibold leading-tight text-zinc-50 sm:text-6xl"
-                  style={{ maxWidth: 820, color: "#f8fafc", fontSize: 62, fontWeight: 600, lineHeight: 1.05 }}
-                >
-                  Turn course chaos into a plan.
-                </h1>
-                <p
-                  className="mt-6 max-w-2xl text-lg leading-8 text-slate-300"
-                  style={{ marginTop: 24, maxWidth: 760, color: "#cbd5e1", fontSize: 20, lineHeight: 1.7 }}
-                >
-                  Cueforth is a student planning platform for turning scattered course information into clear next actions.
-                  Start with PanicButton to extract reviewable deadlines from a syllabus in minutes.
-                </p>
-
-                <div
-                  className="mt-8 flex flex-wrap gap-4"
-                  style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 32 }}
-                >
-                  <Link
-                    href="/panic"
-                    className="inline-flex items-center justify-center rounded-xl bg-blue-500 px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-400"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 12,
-                      background: "#3b82f6",
-                      color: "#ffffff",
-                      padding: "12px 22px",
-                      fontSize: 16,
-                      fontWeight: 600,
-                      textDecoration: "none",
-                    }}
-                  >
-                    Try PanicButton
-                  </Link>
-                  <a
-                    href="#how-it-works"
-                    className="inline-flex items-center justify-center rounded-xl border border-zinc-700 px-6 py-3 text-base font-semibold text-zinc-100 transition-colors hover:bg-zinc-800"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 12,
-                      border: "1px solid #374151",
-                      color: "#e5e7eb",
-                      padding: "12px 22px",
-                      fontSize: 16,
-                      fontWeight: 600,
-                      textDecoration: "none",
-                    }}
-                  >
-                    See How It Works
-                  </a>
-                </div>
-              </div>
-
-              <div
-                className="rounded-3xl border border-zinc-800 bg-black/20 p-6"
-                style={{ border: "1px solid #1f2937", borderRadius: 24, background: "rgba(0,0,0,0.2)", padding: 24 }}
-              >
-                <p
-                  className="text-sm uppercase tracking-[0.2em] text-zinc-500"
-                  style={{ color: "#94a3b8", fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase" }}
-                >
-                  Why it works
-                </p>
-                <div className="mt-6 space-y-5" style={{ marginTop: 24, display: "grid", gap: 20 }}>
-                  <div>
-                    <div className="text-lg font-semibold text-zinc-100" style={{ color: "#f3f4f6", fontSize: 18, fontWeight: 600 }}>
-                      Review before you trust
-                    </div>
-                    <div className="mt-2 text-sm leading-7 text-zinc-400" style={{ marginTop: 8, color: "#9ca3af", fontSize: 14, lineHeight: 1.8 }}>
-                      Cueforth is built around verification, not blind automation. Every extracted deadline should be explainable.
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-semibold text-zinc-100" style={{ color: "#f3f4f6", fontSize: 18, fontWeight: 600 }}>
-                      Calm product, urgent use case
-                    </div>
-                    <div className="mt-2 text-sm leading-7 text-zinc-400" style={{ marginTop: 8, color: "#9ca3af", fontSize: 14, lineHeight: 1.8 }}>
-                      PanicButton is designed for the exact moment students need clarity most, without adding more clutter.
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-semibold text-zinc-100" style={{ color: "#f3f4f6", fontSize: 18, fontWeight: 600 }}>
-                      Built to expand
-                    </div>
-                    <div className="mt-2 text-sm leading-7 text-zinc-400" style={{ marginTop: 8, color: "#9ca3af", fontSize: 14, lineHeight: 1.8 }}>
-                      The platform starts with syllabus extraction, then grows into reminders, workload visibility, and course planning.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="how-it-works" className="px-6 py-10" style={{ padding: "40px 24px" }}>
-        <div className="mx-auto max-w-6xl" style={{ margin: "0 auto", maxWidth: 1152 }}>
-          <div className="mb-8" style={{ marginBottom: 32 }}>
-            <p
-              className="text-sm uppercase tracking-[0.2em] text-blue-300"
-              style={{ color: "#93c5fd", fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase" }}
-            >
-              How Cueforth Works
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold text-zinc-50" style={{ marginTop: 12, color: "#f8fafc", fontSize: 34, fontWeight: 600 }}>
-              Start with PanicButton. Build from there.
-            </h2>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3" style={{ display: "grid", gap: 20 }}>
-            {pillars.map((pillar) => (
-              <div
-                key={pillar.title}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6"
-                style={{ border: "1px solid #1f2937", borderRadius: 20, background: "rgba(24,24,27,0.5)", padding: 24 }}
-              >
-                <div className="text-lg font-semibold text-zinc-100" style={{ color: "#f3f4f6", fontSize: 18, fontWeight: 600 }}>
-                  {pillar.title}
-                </div>
-                <div className="mt-3 text-sm leading-7 text-zinc-400" style={{ marginTop: 12, color: "#9ca3af", fontSize: 14, lineHeight: 1.8 }}>
-                  {pillar.description}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 py-10" style={{ padding: "40px 24px" }}>
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.85fr_1.15fr]" style={{ margin: "0 auto", maxWidth: 1152, display: "grid", gap: 32 }}>
-          <div>
-            <p
-              className="text-sm uppercase tracking-[0.2em] text-blue-300"
-              style={{ color: "#93c5fd", fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase" }}
-            >
-              Three Steps
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold text-zinc-50" style={{ marginTop: 12, color: "#f8fafc", fontSize: 34, fontWeight: 600 }}>
-              The workflow is simple on purpose.
-            </h2>
-          </div>
-
-          <div className="grid gap-4" style={{ display: "grid", gap: 16 }}>
-            {steps.map((step, index) => (
-              <div
-                key={step}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
-                style={{ border: "1px solid #1f2937", borderRadius: 20, background: "rgba(24,24,27,0.4)", padding: 20 }}
-              >
-                <div
-                  className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-blue-400/30 bg-blue-500/10 text-sm font-semibold text-blue-200"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 36,
-                    height: 36,
-                    marginBottom: 12,
-                    borderRadius: 9999,
-                    border: "1px solid rgba(96,165,250,0.3)",
-                    background: "rgba(59,130,246,0.1)",
-                    color: "#bfdbfe",
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  {index + 1}
-                </div>
-                <div className="text-base leading-7 text-zinc-300" style={{ color: "#d1d5db", fontSize: 16, lineHeight: 1.8 }}>
-                  {step}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 pb-12 pt-6" style={{ padding: "24px 24px 48px" }}>
-        <div
-          className="mx-auto max-w-6xl rounded-[28px] border border-zinc-800 bg-zinc-900/50 p-8"
-          style={{ margin: "0 auto", maxWidth: 1152, border: "1px solid #1f2937", borderRadius: 28, background: "rgba(24,24,27,0.5)", padding: 32 }}
-        >
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between" style={{ display: "flex", gap: 24 }}>
             <div>
-              <div
-                className="text-sm uppercase tracking-[0.2em] text-zinc-500"
-                style={{ color: "#94a3b8", fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase" }}
-              >
-                Cueforth PanicButton
+              <div className="text-sm font-semibold text-slate-900">Cueforth</div>
+              <div className="text-xs text-slate-500">PanicButton by Cueforth</div>
+            </div>
+          </div>
+
+          <Link href="/panic" className="action-secondary">
+            Open PanicButton
+          </Link>
+        </header>
+
+        <section className="mt-6 grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="app-surface px-6 py-8 sm:px-10 sm:py-10">
+            <div className="metric-pill">Find what matters next</div>
+            <h1 className="font-display mt-6 max-w-4xl text-5xl leading-[0.95] tracking-[-0.03em] text-slate-950 sm:text-6xl lg:text-7xl">
+              A student planning product that feels deliberate.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
+              Cueforth turns scattered course information into clear next actions. Start with PanicButton to extract
+              reviewable deadlines from a syllabus in minutes.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/panic" className="action-primary">
+                Try PanicButton
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <a href="#why-cueforth" className="action-secondary">
+                See the product logic
+              </a>
+            </div>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-3">
+              {metrics.map((metric) => (
+                <div key={metric.label} className="soft-card-muted px-4 py-4">
+                  <div className="eyebrow">{metric.label}</div>
+                  <div className="mt-3 text-lg font-semibold text-slate-900">{metric.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="app-surface relative overflow-hidden px-6 py-8 sm:px-8">
+            <div className="absolute inset-x-10 top-0 h-36 rounded-full bg-sky-200/40 blur-3xl" />
+            <div className="absolute bottom-8 right-0 h-36 w-36 rounded-full bg-amber-200/50 blur-3xl" />
+
+            <div className="relative">
+              <div className="metric-pill">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Preview
               </div>
-              <h2 className="mt-3 text-3xl font-semibold text-zinc-50" style={{ marginTop: 12, color: "#f8fafc", fontSize: 34, fontWeight: 600 }}>
+
+              <div className="soft-card mt-5 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">This week in PanicButton</div>
+                    <div className="mt-1 text-sm text-slate-500">Reviewable deadlines, not raw PDF text.</div>
+                  </div>
+                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">Live</div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {previewItems.map((item) => (
+                    <div
+                      key={item.title}
+                      className="flex items-center justify-between rounded-2xl border border-[#e5ded2] bg-[#fcfaf6] px-4 py-3"
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                        <div className="mt-1 text-xs text-slate-500">Evidence available · ready to review</div>
+                      </div>
+                      <div className={`rounded-full px-3 py-1 text-xs font-semibold ${item.tone}`}>{item.date}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="soft-card px-5 py-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Trust the evidence
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    Every surfaced item should be inspectable, editable, and easy to confirm under pressure.
+                  </p>
+                </div>
+                <div className="soft-card px-5 py-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <WandSparkles className="h-4 w-4 text-sky-600" />
+                    Keep the motion
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    Export what matters now, then grow into a broader semester workflow without losing the calm.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="why-cueforth" className="mt-8 grid gap-4 lg:grid-cols-3">
+          {pillars.map((pillar) => {
+            const Icon = pillar.icon;
+            return (
+              <div key={pillar.title} className="soft-card px-6 py-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="mt-5 text-xl font-semibold text-slate-950">{pillar.title}</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{pillar.description}</p>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="mt-8 app-surface px-6 py-8 sm:px-10">
+          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <div className="metric-pill">Workflow</div>
+              <h2 className="font-display mt-5 text-4xl leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl">
+                Start with PanicButton. Build from there.
+              </h2>
+              <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
+                The first product surface is intentionally narrow: extract what matters from a syllabus, review it with
+                proof, and move forward with a cleaner calendar.
+              </p>
+            </div>
+
+            <div className="grid gap-4">
+              {steps.map((step, index) => (
+                <div key={step} className="soft-card flex gap-4 px-5 py-5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white">
+                    0{index + 1}
+                  </div>
+                  <div className="pt-1 text-base leading-7 text-slate-700">{step}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-8 app-surface px-6 py-8 sm:px-10">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="eyebrow">Cueforth PanicButton</div>
+              <h2 className="font-display mt-4 text-4xl leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl">
                 Open the workflow and turn one syllabus into a working plan.
               </h2>
             </div>
 
-            <div>
-              <Link
-                href="/panic"
-                className="inline-flex items-center justify-center rounded-xl bg-blue-500 px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-400"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 12,
-                  background: "#3b82f6",
-                  color: "#ffffff",
-                  padding: "12px 22px",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  textDecoration: "none",
-                }}
-              >
-                Open PanicButton
-              </Link>
-            </div>
+            <Link href="/panic" className="action-primary">
+              Open PanicButton
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }
