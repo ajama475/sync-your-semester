@@ -31,6 +31,7 @@ const MONTH_PATTERN =
 export const DATE_REGEXES: RegExp[] = [
   new RegExp(`\\b${MONTH_PATTERN}\\s+(\\d{1,2})(?:,\\s*|\\s+)?(\\d{4})?\\b`, "gi"),
   new RegExp(`\\b(\\d{1,2})\\s+${MONTH_PATTERN}(?:,\\s*|\\s+)?(\\d{4})?\\b`, "gi"),
+  new RegExp(`\\b${MONTH_PATTERN}\\s+(\\d{1,2})\\s*(?:-|to)\\s*(\\d{1,2})(?:,\\s*|\\s+)?(\\d{4})?\\b`, "gi"),
   /\b(\d{4})-(\d{2})-(\d{2})\b/g,
   /\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/g,
   /\b(\d{1,2})\/(\d{1,2})\b/g,
@@ -85,15 +86,34 @@ export function findDateMatches(text: string, defaultYear?: number): DateMatch[]
       let dateISO: string | null = null;
 
       if (patternIndex === 2) {
+        const normalizedMonth = match[1].toLowerCase().replace(/\./g, "");
+        const month = MONTHS[normalizedMonth];
+        const startDay = Number(match[2]);
+        const endDay = Number(match[3]);
+        const yearToken = match[4];
+        const year = yearToken ? Number(yearToken) : currentYear;
+
+        flags.push("date_range_start_only");
+        if (!yearToken) {
+          flags.push("year_missing_assumed_default");
+        }
+        if (endDay > startDay) {
+          flags.push("date_range_multi_day");
+        }
+
+        dateISO = toISO(year, month, startDay);
+      } else if (patternIndex === 3) {
         dateISO = toISO(Number(match[1]), Number(match[2]), Number(match[3]));
-      } else if (patternIndex === 3 || patternIndex === 4) {
+      } else if (patternIndex === 4 || patternIndex === 5) {
         const a = Number(match[1]);
         const b = Number(match[2]);
-        const yearToken = patternIndex === 3 ? match[3] : undefined;
+        const yearToken = patternIndex === 4 ? match[3] : undefined;
         const y = yearToken ? Number(yearToken.length === 2 ? `20${yearToken}` : yearToken) : currentYear;
 
         if (!yearToken) {
           flags.push("year_missing_assumed_default");
+        } else if (Math.abs(y - currentYear) > 1) {
+          flags.push("year_outlier_from_default");
         }
 
         dateISO = interpretSlashDate(a, b, y, flags);
@@ -110,6 +130,8 @@ export function findDateMatches(text: string, defaultYear?: number): DateMatch[]
 
         if (!yearToken) {
           flags.push("year_missing_assumed_default");
+        } else if (Math.abs(year - currentYear) > 1) {
+          flags.push("year_outlier_from_default");
         }
 
         dateISO = toISO(year, month, day);

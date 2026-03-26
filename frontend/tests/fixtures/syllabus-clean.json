@@ -1,0 +1,45 @@
+{
+  "name": "syllabus-clean",
+  "source": "public/demo/syllabus-clean.pdf",
+  "defaultYear": 2026,
+  "parser": {
+    "hasExtractableText": true
+  },
+  "required": [
+    {
+      "dateISO": "2026-02-13",
+      "type": "assignment",
+      "titleIncludes": "Assignment 1",
+      "minConfidence": 65
+    },
+    {
+      "dateISO": "2026-02-27",
+      "type": "assignment",
+      "titleIncludes": "Assignment 2",
+      "minConfidence": 65
+    },
+    {
+      "dateISO": "2026-03-05",
+      "type": "midterm",
+      "titleIncludes": "Midterm",
+      "minConfidence": 65
+    },
+    {
+      "dateISO": "2026-03-20",
+      "type": "assignment",
+      "titleIncludes": "Assignment 3",
+      "minConfidence": 65
+    },
+    {
+      "dateISO": "2026-04-03",
+      "type": "assignment",
+      "titleIncludes": "Assignment 4",
+      "minConfidence": 65
+    }
+  ],
+  "forbidden": [],
+  "thresholds": {
+    "maxCandidates": 5,
+    "maxLowConfidence": 0
+  }
+}

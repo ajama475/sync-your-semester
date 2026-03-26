@@ -1,0 +1,88 @@
+{
+  "name": "syllabus-dirty2",
+  "source": "public/demo/syllabus-dirty2.pdf",
+  "defaultYear": 2026,
+  "parser": {
+    "hasExtractableText": true
+  },
+  "required": [
+    {
+      "dateISO": "2026-01-28",
+      "type": "assignment",
+      "titleIncludes": "In-class writing",
+      "minConfidence": 55
+    },
+    {
+      "dateISO": "2026-01-30",
+      "type": "quiz",
+      "titleIncludes": "Quiz",
+      "minConfidence": 60
+    },
+    {
+      "dateISO": "2026-02-13",
+      "type": "assignment",
+      "titleIncludes": "In-class writing",
+      "minConfidence": 55
+    },
+    {
+      "dateISO": "2026-02-27",
+      "type": "quiz",
+      "titleIncludes": "Quiz",
+      "minConfidence": 60
+    },
+    {
+      "dateISO": "2026-03-06",
+      "type": "assignment",
+      "titleIncludes": "In-class writing",
+      "minConfidence": 55
+    },
+    {
+      "dateISO": "2026-03-13",
+      "type": "quiz",
+      "titleIncludes": "Quiz",
+      "minConfidence": 65
+    },
+    {
+      "dateISO": "2026-03-20",
+      "type": "assignment",
+      "titleIncludes": "In-class writing",
+      "minConfidence": 55
+    },
+    {
+      "dateISO": "2026-04-01",
+      "type": "assignment",
+      "titleIncludes": "assignment",
+      "minConfidence": 70
+    },
+    {
+      "dateISO": "2026-04-20",
+      "type": "final",
+      "titleIncludes": "Final exam",
+      "minConfidence": 55
+    }
+  ],
+  "forbidden": [
+    {
+      "dateISO": "2019-03-25"
+    },
+    {
+      "dateISO": "2026-03-09",
+      "titleIncludes": "Week of"
+    },
+    {
+      "dateISO": "2026-03-16",
+      "type": "quiz"
+    },
+    {
+      "dateISO": "2026-03-30"
+    },
+    {
+      "dateISO": "2026-04-06",
+      "titleIncludes": "Exam outline"
+    }
+  ],
+  "thresholds": {
+    "maxCandidates": 10,
+    "maxLowConfidence": 1
+  }
+}

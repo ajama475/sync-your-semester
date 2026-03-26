@@ -17,7 +17,7 @@ interface EvaluatedContext {
 }
 
 const DEADLINE_CHUNK_REGEX =
-  /\b(assignment\s*\d+|assignment|midterm|final\s*exam|final|quiz\s*\d+|quiz|test|project|lab|homework|hw|exam|reading|chapter|proposal|presentation)\b/gi;
+  /\b(in-class\s+writing|assignment\s*\d+|assignment|midterm|final\s*exam|final\s*examination|final|quiz\s*\d+|quiz|test|project|lab|homework|hw|exam|reading|chapter|proposal|presentation)\b/gi;
 
 function makeId(seed: string): string {
   let h = 0;
@@ -156,6 +156,7 @@ function inferTypeFromChunk(chunk: string): DeadlineType {
   const lower = chunk.toLowerCase();
   if (lower.includes("midterm") || lower.includes("mid-term")) return "midterm";
   if (lower.includes("final")) return "final";
+  if (lower.includes("exam")) return "exam";
   if (lower.includes("assignment") || lower.includes("homework") || /\bhw\b/.test(lower)) return "assignment";
   if (lower.includes("quiz") || lower.includes("test")) return "quiz";
   if (lower.includes("lab")) return "lab";
@@ -165,6 +166,7 @@ function inferTypeFromChunk(chunk: string): DeadlineType {
 }
 
 function fallbackTitle(type: DeadlineType) {
+  if (type === "exam") return "Exam";
   if (type === "midterm") return "Midterm";
   if (type === "final") return "Final Exam";
   if (type === "lab") return "Lab";
@@ -178,6 +180,7 @@ function cleanTitlePhrase(value: string, dateRaw: string) {
   cleaned = cleaned.replace(new RegExp(escapeRegExp(dateRaw), "ig"), " ");
   cleaned = cleaned.replace(/\b\d{1,3}\s*%/g, " ");
   cleaned = cleaned.replace(/\b(worth|weighted)\s+\d{1,3}\s*%?/gi, " ");
+  cleaned = cleaned.replace(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b/gi, " ");
   cleaned = cleaned.replace(/\b(written\s+on|held\s+on|due|deadline|submit|submission|available|opens?|closes?|until|by|on|at|before|after)\b/gi, " ");
   cleaned = cleaned.replace(/\b([01]?\d|2[0-3]):[0-5]\d\b/gi, " ");
   cleaned = cleaned.replace(/\b(1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(am|pm)\b/gi, " ");
@@ -188,6 +191,25 @@ function cleanTitlePhrase(value: string, dateRaw: string) {
 }
 
 function inferTitleFromChunk(chunk: string, type: DeadlineType, dateRaw: string): string {
+  const ordinalExamMatch = /\b(first|second|third|fourth)\s+exam(?:\s*[:\-]\s*|\s+)?(.+)?/i.exec(chunk);
+  if (ordinalExamMatch) {
+    const suffix = cleanTitlePhrase(ordinalExamMatch[2] ?? "", dateRaw);
+    const label = `${ordinalExamMatch[1][0].toUpperCase()}${ordinalExamMatch[1].slice(1).toLowerCase()} Exam`;
+    return suffix ? `${label} ${suffix}` : label;
+  }
+
+  const genericExamMatch = /\bexam(?:ination)?(?:\s*[:\-]\s*|\s+)?(.+)?/i.exec(chunk);
+  if (genericExamMatch && type === "exam") {
+    const suffix = cleanTitlePhrase(genericExamMatch[1] ?? "", dateRaw);
+    return suffix ? `Exam ${suffix}` : "Exam";
+  }
+
+  const inClassWritingMatch = /\bin-class writing(?:\s*[:\-]\s*|\s+)?(.+)?/i.exec(chunk);
+  if (inClassWritingMatch) {
+    const suffix = cleanTitlePhrase(inClassWritingMatch[1] ?? "", dateRaw);
+    return suffix ? `In-class writing ${suffix}` : "In-class writing";
+  }
+
   const assignmentMatch = /\bassignment\s*(\d{1,2})(?:\s*[:\-]\s*|\s+)?(.+)?/i.exec(chunk);
   if (assignmentMatch) {
     const suffix = cleanTitlePhrase(assignmentMatch[2] ?? "", dateRaw);
@@ -203,6 +225,7 @@ function inferTitleFromChunk(chunk: string, type: DeadlineType, dateRaw: string)
   const title = cleanTitlePhrase(chunk, dateRaw);
 
   const typeKeywordPatterns: Record<DeadlineType, RegExp[]> = {
+    exam: [/\b(?:first|second|third|fourth)\s+exam(?:\s+[a-z0-9][a-z0-9\s]*)?/i, /\bexam(?:ination)?(?:\s+[a-z0-9][a-z0-9\s]*)?/i],
     midterm: [/\bmidterm(?:\s+[a-z0-9][a-z0-9\s]*)?/i],
     final: [/\bfinal(?:\s+exam)?(?:\s+[a-z0-9][a-z0-9\s]*)?/i],
     quiz: [/\bquiz(?:\s*\d+)?(?:\s+[a-z0-9][a-z0-9\s]*)?/i, /\btest(?:\s+[a-z0-9][a-z0-9\s]*)?/i],
@@ -270,7 +293,7 @@ function detectNonDeadlineSignals(chunk: string): string[] {
   ];
 
   const strongDeadlineSignal =
-    /\b(due|deadline|submit|submission|exam|midterm|final|quiz|assignment|project|lab|homework|proposal|presentation)\b/.test(
+    /\b(due|deadline|submit|submission|exam|midterm|final|quiz|assignment|project|lab|homework|proposal|presentation|in-class writing)\b/.test(
       lower
     );
 
@@ -325,7 +348,12 @@ function evaluateBestContext(contexts: string[], dateRaw: string, dateFlags: str
     const confidence = Math.max(0, scored.confidence - (negativeFlags.includes("non_deadline_context") ? 25 : 0));
     const flags = Array.from(new Set([...scored.flags, ...negativeFlags]));
 
-    if (!best || confidence > best.confidence || (confidence === best.confidence && chunk.length < best.context.length)) {
+    const hasExplicitDeadline = /\b(due|deadline|submit|exam|midterm|final|quiz|assignment|in-class writing)\b/i.test(chunk);
+    const explicitBoost = hasExplicitDeadline ? 6 : 0;
+    const effectiveScore = confidence + explicitBoost;
+    const bestEffectiveScore = best ? best.confidence + (/\b(due|deadline|submit|exam|midterm|final|quiz|assignment|in-class writing)\b/i.test(best.context) ? 6 : 0) : -1;
+
+    if (!best || effectiveScore > bestEffectiveScore || (effectiveScore === bestEffectiveScore && chunk.length < best.context.length)) {
       best = {
         context: chunk,
         confidence,
@@ -397,11 +425,13 @@ export function extractDeadlines(rawText: string, defaultYear?: number): Extract
   }
 
   const dedupedCandidates = candidates.filter((candidate, index) => {
+    const key = `${candidate.dateISO}|${candidate.type}|${candidate.title.toLowerCase()}`;
     const duplicateIndex = candidates.findIndex((other) => {
-      const similarLocation = Math.abs(other.evidence.indexStart - candidate.evidence.indexStart) < 10;
-      const sameDate = other.dateISO === candidate.dateISO;
-      const sameTitle = other.title.toLowerCase() === candidate.title.toLowerCase();
-      return sameDate && similarLocation && sameTitle;
+      const otherKey = `${other.dateISO}|${other.type}|${other.title.toLowerCase()}`;
+      if (otherKey !== key) return false;
+      if (other.confidence > candidate.confidence) return true;
+      if (other.confidence < candidate.confidence) return false;
+      return other.evidence.indexStart <= candidate.evidence.indexStart;
     });
 
     return duplicateIndex === index;

@@ -115,6 +115,7 @@ function confidenceCue(confidence: number) {
 
 function typeTone(type: DeadlineCandidate["type"]) {
   switch (type) {
+    case "exam":
     case "midterm":
     case "final":
       return "bg-rose-50 text-rose-700";

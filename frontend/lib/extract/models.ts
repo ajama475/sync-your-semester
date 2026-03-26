@@ -1,4 +1,5 @@
 export type DeadlineType =
+  | "exam"
   | "midterm"
   | "final"
   | "quiz"

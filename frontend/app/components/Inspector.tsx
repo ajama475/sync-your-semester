@@ -137,7 +137,7 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
               onChange={(event) => onUpdate(selected.id, { type: event.target.value as DeadlineType })}
               className="field-shell-select w-full"
             >
-              {["midterm", "final", "quiz", "assignment", "lab", "project", "reading", "other"].map((type) => (
+              {["exam", "midterm", "final", "quiz", "assignment", "lab", "project", "reading", "other"].map((type) => (
                 <option key={type} value={type}>
                   {type.toUpperCase()}
                 </option>
