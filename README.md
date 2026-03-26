@@ -10,7 +10,7 @@ Its flagship workflow, **PanicButton**, helps students upload a syllabus, review
 ---
 
 ## Current Preview URL
-👉 https://panicbutton-app.vercel.app
+https://cueforth.vercel.app/
 
 ---
 
@@ -25,7 +25,7 @@ Its flagship workflow, **PanicButton**, helps students upload a syllabus, review
 
 Check out the full documentation:
 
-👉 https://github.com/ajama475/panicbutton/wiki
+ https://github.com/ajama475/panicbutton/wiki
 
 ---
 
