@@ -594,35 +594,35 @@ export default function PanicUpload() {
 
   const triageSummary = [
     {
-      label: "High confidence",
+      label: "Ready",
       value: String(highConfidenceCount),
-      detail: "Strong enough to export",
+      detail: "Clear enough to export",
       tone: "text-emerald-700",
     },
     {
       label: "Review",
       value: String(reviewCount),
-      detail: "Worth one quick check",
+      detail: "Quick check recommended",
       tone: "text-amber-700",
     },
     {
-      label: "Unclear",
+      label: "Fix",
       value: String(unclearCount),
-      detail: "Fix before calendar export",
+      detail: "Needs correction first",
       tone: "text-rose-700",
     },
   ];
 
   return (
     <div className="app-surface relative overflow-hidden">
-      <div className={cn("border-b border-[#dfd6c8] bg-[#f6f0e7] px-6 sm:px-8", rawText ? "py-4" : "py-6")}>
+      <div className={cn("border-b border-[#dde3d9] bg-[#f4f7f2] px-6 sm:px-8", rawText ? "py-4" : "py-6")}>
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="metric-pill">Cueforth · PanicButton</div>
+              <div className="metric-pill">Cueforth PanicButton</div>
               {rawText ? (
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Review desk loaded
+                  Modules loaded
                 </div>
               ) : null}
             </div>
@@ -632,7 +632,7 @@ export default function PanicUpload() {
                 rawText ? "mt-4 text-3xl sm:text-[2.4rem]" : "mt-5 text-4xl sm:text-5xl"
               )}
             >
-              Deadline triage for one course outline.
+              {rawText ? "Review one course outline in a familiar module layout." : "Turn one syllabus into a clear course checklist."}
             </h1>
             <p
               className={cn(
@@ -641,19 +641,19 @@ export default function PanicUpload() {
               )}
             >
               {rawText
-                ? "Scan the ledger, verify the uncertain rows, and get this course into a calendar without dragging the panic with it."
-                : "Upload the syllabus, move row by row, correct what matters, and leave with a calendar file that feels safe."}
+                ? "Move through the detected rows the way students already read course pages: clear sections, visible source context, and obvious next actions."
+                : "Upload the syllabus, review the surfaced deadlines, correct anything uncertain, and leave with a calendar file you can trust."}
             </p>
 
             <div className={cn("flex flex-wrap items-center gap-3", rawText ? "mt-4" : "mt-6")}>
               <button onClick={() => fileInputRef.current?.click()} className="action-primary">
                 <Upload className="h-4 w-4" />
-                Upload PDF
+                Upload syllabus PDF
               </button>
               {rawText ? (
                 <button onClick={addManualDeadline} className="action-secondary">
                   <Pencil className="h-4 w-4" />
-                  Add manual entry
+                  Add manual item
                 </button>
               ) : null}
               {status ? <div className="metric-pill">{loading ? "Processing" : status}</div> : null}
@@ -662,7 +662,7 @@ export default function PanicUpload() {
 
           <div className="paper-panel px-5 py-5">
             <div className="flex items-center justify-between gap-4">
-              <div className="eyebrow">{rawText ? "Ledger status" : "Triage status"}</div>
+              <div className="eyebrow">{rawText ? "Course status" : "Upload status"}</div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {pages ? `${pages} pages read` : "Awaiting upload"}
               </div>
@@ -671,7 +671,7 @@ export default function PanicUpload() {
               {triageSummary.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-[18px] border border-[#e6ddd0] bg-[#fbf7f1] px-4 py-3"
+                  className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3"
                 >
                   <div className="text-sm font-semibold text-slate-900">{item.label}</div>
                   <div className={cn("mt-3 text-2xl font-semibold", item.tone)}>{item.value}</div>
@@ -682,12 +682,12 @@ export default function PanicUpload() {
 
             {rawText ? (
               <div className="mt-4 annotation-note px-4 py-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Keyboard review</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Keyboard shortcuts</div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
-                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">J/K move</span>
-                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">E edit</span>
-                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">A checked</span>
-                  <span className="rounded-[999px] border border-[#ddd4c7] bg-[#fffdfa] px-3 py-1.5">X dismiss</span>
+                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">J/K move</span>
+                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">E edit</span>
+                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">A confirm</span>
+                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">X dismiss</span>
                 </div>
               </div>
             ) : null}
@@ -720,26 +720,26 @@ export default function PanicUpload() {
               onDragLeave={handleDragLeave}
               onKeyDown={handleUploadKeyDown}
               className={cn(
-                "paper-panel ruled-paper relative overflow-hidden border-2 border-[#cdc2b3] px-6 py-7 text-left outline-none transition-all duration-200 sm:px-8 sm:py-8",
+                "paper-panel ruled-paper relative overflow-hidden border-2 border-[#c7d5c5] px-6 py-7 text-left outline-none transition-all duration-200 sm:px-8 sm:py-8",
                 dragActive && "upload-zone-active"
               )}
             >
-              <div className="absolute right-6 top-6 rounded-[14px] border border-[#d8cec0] bg-[#f7f1e8] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+              <div className="absolute right-6 top-6 rounded-[14px] border border-[#d7ddd4] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
                 Drag or browse
               </div>
 
-              <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-slate-950 text-white shadow-[0_12px_32px_rgba(24,33,51,0.14)]">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#2f5e3d] text-white shadow-[0_12px_32px_rgba(36,74,48,0.18)]">
                 <Upload className="h-6 w-6" />
               </div>
 
               <div className="mt-8 max-w-2xl">
-                <div className="eyebrow">Emergency upload desk</div>
+                <div className="eyebrow">Start here</div>
                 <div className="font-display mt-3 text-5xl leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-6xl">
-                  Drop the course outline here.
+                  Upload the course outline.
                 </div>
                 <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-                  Find assignment, midterm, lab, and exam dates from your syllabus. PanicButton is built for the
-                  moment the document feels larger than your week.
+                  PanicButton reads the syllabus, surfaces likely deadlines, and lays them out like the course tools
+                  students already know how to scan.
                 </p>
               </div>
 
@@ -756,13 +756,13 @@ export default function PanicUpload() {
                 ))}
               </div>
 
-              <div className="mt-8 rounded-[22px] border border-[#e6ddd0] bg-[#fffdfa]/95 px-5 py-5">
+              <div className="mt-8 rounded-[22px] border border-[#dfe5dc] bg-white/95 px-5 py-5">
                 <div className="eyebrow">Looks for</div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {["Assignments", "Midterms", "Finals", "Labs", "Projects", "Readings"].map((label) => (
                     <span
                       key={label}
-                      className="rounded-[999px] border border-[#e2d8ca] bg-[#f7f1e8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700"
+                      className="rounded-[999px] border border-[#d7ddd4] bg-[#f6f8f4] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700"
                     >
                       {label}
                     </span>
@@ -779,8 +779,8 @@ export default function PanicUpload() {
             <div className="space-y-4">
               <div className="paper-panel px-5 py-5">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <FileText className="h-4 w-4 text-slate-600" />
-                  Syllabus cues
+                  <FileText className="h-4 w-4 text-[#2f5e3d]" />
+                  Example course cues
                 </div>
                 <div className="mt-5 space-y-3">
                   {[
@@ -788,10 +788,10 @@ export default function PanicUpload() {
                     { date: "Oct 06", text: "Midterm exam covers weeks 1 through 5." },
                     { date: "Nov 21", text: "Project checkpoint presentation." },
                   ].map((item) => (
-                    <div key={item.text} className="rounded-[18px] border border-[#e5ddd0] bg-[#fbf7f1] px-4 py-3">
+                    <div key={item.text} className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 text-sm leading-6 text-slate-700">{item.text}</div>
-                        <div className="rounded-[999px] bg-[#f4d7cf] px-3 py-1.5 text-xs font-semibold text-[#8b3f2f]">
+                        <div className="rounded-[999px] bg-[#eef4ec] px-3 py-1.5 text-xs font-semibold text-[#2f5e3d]">
                           {item.date}
                         </div>
                       </div>
@@ -803,11 +803,10 @@ export default function PanicUpload() {
               <div className="annotation-note px-5 py-5">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <ShieldCheck className="h-4 w-4 text-emerald-700" />
-                  Practical trust
+                  Trust stays visible
                 </div>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  The point is not to guess. The point is to surface likely deadlines fast, keep uncertainty visible,
-                  and make correction easy.
+                  Students can see what was matched, what still needs attention, and what is ready to leave the page.
                 </p>
               </div>
             </div>
@@ -816,6 +815,13 @@ export default function PanicUpload() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.28fr)_360px]">
             <section className="space-y-4">
               <div className="paper-panel px-4 py-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="eyebrow">Module controls</div>
+                    <div className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Filter and sort the detected rows</div>
+                  </div>
+                  <div className="metric-pill">{displayCandidates.length} visible items</div>
+                </div>
                 <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))]">
                   <label className="space-y-2">
                     <div className="eyebrow">Search</div>
@@ -891,50 +897,63 @@ export default function PanicUpload() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {displayCandidates.map((candidate) => {
-                    const date = formatDate(candidate.dateISO);
-                    const isActive = activeId === candidate.id;
-                    const confidence = confidenceMeta(candidate.confidence);
-                    const cue = confidenceCue(candidate.confidence);
-                    const pageNumber = candidatePageMap.get(candidate.id);
+                <div className="paper-panel overflow-hidden">
+                  <div className="border-b border-[#dde3d9] bg-[#eef3ec] px-5 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-semibold tracking-tight text-slate-950">Detected deadlines</div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          Review these rows like module items, then open the side panel when a date needs correction.
+                        </div>
+                      </div>
+                      <div className="metric-pill">Modules</div>
+                    </div>
+                  </div>
 
-                    return (
-                      <div
-                        key={candidate.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setActiveId(candidate.id)}
-                        onFocus={() => setActiveId(candidate.id)}
-                        onKeyDown={(event) => {
-                          const key = event.key.toLowerCase();
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            setActiveId(candidate.id);
-                            setInspectorOpen(true);
-                          } else if (event.key === " ") {
-                            event.preventDefault();
-                            setActiveId(candidate.id);
-                          } else if (key === "a") {
-                            event.preventDefault();
-                            markCandidateChecked(candidate.id);
-                          } else if (key === "x") {
-                            event.preventDefault();
-                            removeCandidate(candidate.id);
-                          } else if (key === "e") {
-                            event.preventDefault();
-                            setActiveId(candidate.id);
-                            setInspectorOpen(true);
-                          }
-                        }}
-                        className={cn(
-                          "triage-row outline-none",
-                          candidate.confidence < 60 && "border-[#efc4b6] bg-[#fffdf9]",
-                          isActive && "triage-row-active"
-                        )}
-                      >
-                        <div className="grid gap-4 lg:grid-cols-[82px_minmax(0,1fr)_188px]">
-                          <div className="border-b border-[#ece3d7] pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+                  <div className="space-y-2.5 px-3 py-3">
+                    {displayCandidates.map((candidate) => {
+                      const date = formatDate(candidate.dateISO);
+                      const isActive = activeId === candidate.id;
+                      const confidence = confidenceMeta(candidate.confidence);
+                      const cue = confidenceCue(candidate.confidence);
+                      const pageNumber = candidatePageMap.get(candidate.id);
+
+                      return (
+                        <div
+                          key={candidate.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setActiveId(candidate.id)}
+                          onFocus={() => setActiveId(candidate.id)}
+                          onKeyDown={(event) => {
+                            const key = event.key.toLowerCase();
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              setActiveId(candidate.id);
+                              setInspectorOpen(true);
+                            } else if (event.key === " ") {
+                              event.preventDefault();
+                              setActiveId(candidate.id);
+                            } else if (key === "a") {
+                              event.preventDefault();
+                              markCandidateChecked(candidate.id);
+                            } else if (key === "x") {
+                              event.preventDefault();
+                              removeCandidate(candidate.id);
+                            } else if (key === "e") {
+                              event.preventDefault();
+                              setActiveId(candidate.id);
+                              setInspectorOpen(true);
+                            }
+                          }}
+                          className={cn(
+                            "triage-row outline-none",
+                            candidate.confidence < 60 && "border-[#efc4b6] bg-[#fffdf9]",
+                            isActive && "triage-row-active"
+                          )}
+                        >
+                          <div className="grid gap-4 lg:grid-cols-[82px_minmax(0,1fr)_188px]">
+                            <div className="border-b border-[#e3e8e1] pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
                             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{date.month}</div>
                             <div className="font-display mt-1.5 text-4xl leading-none tracking-[-0.04em] text-slate-950">
                               {date.day}
@@ -947,13 +966,13 @@ export default function PanicUpload() {
                               </div>
                             ) : null}
                             {pageNumber ? (
-                              <div className="mt-2.5 rounded-[999px] bg-[#eef2f7] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                              <div className="mt-2.5 rounded-[999px] bg-[#eef4ec] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#2f5e3d]">
                                 Page {pageNumber}
                               </div>
                             ) : null}
-                          </div>
+                            </div>
 
-                          <div className="min-w-0">
+                            <div className="min-w-0">
                             <div className="text-lg font-semibold tracking-tight text-slate-950">
                               {candidate.title || "Untitled deadline"}
                             </div>
@@ -997,7 +1016,7 @@ export default function PanicUpload() {
 
                             <div className="mt-2.5 flex flex-wrap gap-2 text-xs text-slate-500">
                               {candidate.evidence.matchedDateText ? (
-                                <span className="rounded-[999px] border border-[#ddd4c7] bg-[#f7f1e8] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                <span className="rounded-[999px] border border-[#d7ddd4] bg-[#f6f8f4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
                                   {candidate.evidence.matchedDateText}
                                 </span>
                               ) : null}
@@ -1015,9 +1034,9 @@ export default function PanicUpload() {
                                 </span>
                               ) : null}
                             </div>
-                          </div>
+                            </div>
 
-                          <div className="flex flex-col gap-2.5 lg:items-end">
+                            <div className="flex flex-col gap-2.5 lg:items-end">
                             <div className={cn("confidence-pill", confidence.tone)}>
                               <span className="h-2 w-2 rounded-full bg-current" />
                               {confidence.label}
@@ -1043,7 +1062,7 @@ export default function PanicUpload() {
                                   setActiveId(candidate.id);
                                   setInspectorOpen(true);
                                 }}
-                                className="rounded-[12px] border border-[#ddd4c7] bg-[#f7f1e8] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#f1eadf]"
+                                className="rounded-[12px] border border-[#d7ddd4] bg-[#f6f8f4] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#edf3eb]"
                               >
                                 E Edit
                               </button>
@@ -1058,11 +1077,12 @@ export default function PanicUpload() {
                                 X Dismiss
                               </button>
                             </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </section>
@@ -1073,10 +1093,10 @@ export default function PanicUpload() {
                   <>
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                      Calendar secured
+                      Calendar export ready
                     </div>
                     <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      The course dates are out of the document now.
+                      This course now has a working deadline file.
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       {lastExport.count} deadline{lastExport.count === 1 ? "" : "s"} exported as{" "}
@@ -1087,11 +1107,11 @@ export default function PanicUpload() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <CalendarClock className="h-4 w-4 text-slate-700" />
-                      Release desk
+                      <CalendarClock className="h-4 w-4 text-[#2f5e3d]" />
+                      Calendar export
                     </div>
                     <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      Send the reviewed rows somewhere safe.
+                      Send the confirmed rows somewhere safe.
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       {exportableCandidates.length} visible deadline{exportableCandidates.length === 1 ? "" : "s"} are ready to leave the
@@ -1122,7 +1142,7 @@ export default function PanicUpload() {
                   <div className="flex items-start gap-3">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
                     <div className="text-sm leading-7 text-slate-600">
-                      Export is based on the rows currently visible in triage. Tighten filters first if you want a smaller release.
+                      Export is based on the rows currently visible in the module list. Tighten filters first if you want a smaller release.
                     </div>
                   </div>
                 </div>
@@ -1131,11 +1151,11 @@ export default function PanicUpload() {
               <div className="paper-panel px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <FileText className="h-4 w-4 text-slate-700" />
-                    Course document
+                    <FileText className="h-4 w-4 text-[#2f5e3d]" />
+                    Source document
                   </div>
                   {activePage ? (
-                    <div className="rounded-[999px] bg-[#eef2f7] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                    <div className="rounded-[999px] bg-[#eef4ec] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f5e3d]">
                       Page {activePage.pageNumber}
                     </div>
                   ) : null}
@@ -1147,7 +1167,7 @@ export default function PanicUpload() {
                       <button
                         onClick={() => movePage(-1)}
                         disabled={!activePageNumber || activePageNumber <= 1}
-                        className="rounded-[14px] border border-[#ddd4c7] bg-[#fffdfa] p-2 text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-[14px] border border-[#d7ddd4] bg-white p-2 text-slate-700 transition-colors hover:bg-[#f8faf7] disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
@@ -1164,8 +1184,8 @@ export default function PanicUpload() {
                                 className={cn(
                                   "min-w-fit rounded-[14px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
                                   isCurrentPage
-                                    ? "border-slate-950 bg-slate-950 text-white"
-                                    : "border-[#ddd4c7] bg-[#fffdfa] text-slate-700 hover:bg-white"
+                                    ? "border-[#2f5e3d] bg-[#2f5e3d] text-white"
+                                    : "border-[#d7ddd4] bg-white text-slate-700 hover:bg-[#f8faf7]"
                                 )}
                               >
                                 Page {page.pageNumber}
@@ -1178,7 +1198,7 @@ export default function PanicUpload() {
                       <button
                         onClick={() => movePage(1)}
                         disabled={!activePageNumber || activePageNumber >= parsedPages.length}
-                        className="rounded-[14px] border border-[#ddd4c7] bg-[#fffdfa] p-2 text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-[14px] border border-[#d7ddd4] bg-white p-2 text-slate-700 transition-colors hover:bg-[#f8faf7] disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>
@@ -1203,8 +1223,8 @@ export default function PanicUpload() {
 
                     <div className="mt-4 max-h-[460px] overflow-y-auto pr-1">
                       <div className="document-sheet px-4 py-4">
-                        <div className="pointer-events-none absolute inset-y-0 left-12 w-px bg-[#d9cebe]" />
-                        <div className="pointer-events-none absolute right-4 top-4 rounded-[999px] border border-[#e1d8ca] bg-[#fffdfa] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        <div className="pointer-events-none absolute inset-y-0 left-12 w-px bg-[#d6dfd4]" />
+                        <div className="pointer-events-none absolute right-4 top-4 rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                           Extracted page text
                         </div>
                         <div className="space-y-3">
@@ -1222,7 +1242,7 @@ export default function PanicUpload() {
                                     "rounded-r-[14px] border px-4 py-3 text-sm leading-7 transition-colors",
                                     isHighlighted
                                       ? "border-[#f0ba75] bg-[#fff1dc] text-slate-900 shadow-[inset_4px_0_0_0_#f0ba75]"
-                                      : "border-[#e8dfd3] bg-[#fffdfa]/88 text-slate-700"
+                                      : "border-[#dfe5dc] bg-white/88 text-slate-700"
                                   )}
                                 >
                                   {segment}
@@ -1245,8 +1265,8 @@ export default function PanicUpload() {
                               className={cn(
                                 "rounded-[999px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
                                 activeId === candidate.id
-                                  ? "border-slate-950 bg-slate-950 text-white"
-                                  : "border-[#ddd4c7] bg-[#fffdfa] text-slate-700 hover:bg-white"
+                                  ? "border-[#2f5e3d] bg-[#2f5e3d] text-white"
+                                  : "border-[#d7ddd4] bg-white text-slate-700 hover:bg-[#f8faf7]"
                               )}
                             >
                               {candidate.title}
@@ -1268,7 +1288,7 @@ export default function PanicUpload() {
                   <div className="flex items-start gap-3">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">Keep uncertain rows moving</div>
+                      <div className="text-sm font-semibold text-slate-900">Start with the rows that need attention</div>
                       <p className="mt-2 text-sm leading-7 text-slate-600">
                         Start with the rows marked unclear. The review panel keeps the detected value visible while you
                         make the correction.

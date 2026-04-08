@@ -35,16 +35,16 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
 
   return (
     <div className={cn("inspector-shell fixed inset-y-0 right-0 z-50 flex w-full flex-col sm:w-[460px]", className)}>
-      <div className="border-b border-[#dfd6c8] px-6 py-6">
+      <div className="border-b border-[#d9e0d7] px-6 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Correction desk</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Review panel</div>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Verify and correct</h2>
-            <p className="mt-2 text-sm text-slate-500">Keep the detected values visible while you tighten the final record.</p>
+            <p className="mt-2 text-sm text-slate-500">Compare the detected record with the final value you want to export.</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-[16px] border border-[#ddd4c7] bg-[#fffdfa] p-3 text-slate-500 transition-colors hover:bg-white hover:text-slate-900"
+            className="rounded-[16px] border border-[#d7ddd4] bg-white p-3 text-slate-500 transition-colors hover:bg-[#f8faf7] hover:text-slate-900"
           >
             <X className="h-5 w-5" />
           </button>
@@ -85,23 +85,23 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
 
         <section className="paper-panel px-5 py-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <ShieldCheck className="h-4 w-4 text-slate-600" />
+            <ShieldCheck className="h-4 w-4 text-[#2f5e3d]" />
             Detected record
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[18px] border border-[#e7dfd3] bg-[#fbf7f1] px-4 py-3">
+            <div className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
               <div className="eyebrow">Title</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">{original?.title || selected.title}</div>
             </div>
-            <div className="rounded-[18px] border border-[#e7dfd3] bg-[#fbf7f1] px-4 py-3">
+            <div className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
               <div className="eyebrow">Type</div>
               <div className="mt-2 text-sm font-semibold uppercase text-slate-900">{original?.type || selected.type}</div>
             </div>
-            <div className="rounded-[18px] border border-[#e7dfd3] bg-[#fbf7f1] px-4 py-3">
+            <div className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
               <div className="eyebrow">Date</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">{original?.dateISO || selected.dateISO}</div>
             </div>
-            <div className="rounded-[18px] border border-[#e7dfd3] bg-[#fbf7f1] px-4 py-3">
+            <div className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
               <div className="eyebrow">Time</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">{original?.time24h || "Not specified"}</div>
             </div>
@@ -110,7 +110,7 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
 
         <section className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <Pencil className="h-4 w-4 text-slate-600" />
+            <Pencil className="h-4 w-4 text-[#2f5e3d]" />
             Final values
           </div>
 
@@ -200,7 +200,7 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
           <div className="flex flex-wrap gap-2">
             <span className="metric-pill">Matched date: {selected.evidence.matchedDateText || "not captured"}</span>
             {selected.evidence.matchedKeywords.map((keyword) => (
-              <span key={keyword} className="rounded-[999px] bg-[#edf2fb] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-800">
+              <span key={keyword} className="rounded-[999px] bg-[#eef4ec] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f5e3d]">
                 {keyword}
               </span>
             ))}
@@ -208,7 +208,7 @@ export const Inspector = ({ selected, original, onUpdate, onRemove, onClose, cla
         </section>
       </div>
 
-      <div className="flex gap-3 border-t border-[#dfd6c8] px-6 py-6">
+      <div className="flex gap-3 border-t border-[#d9e0d7] px-6 py-6">
         <button
           onClick={() => onRemove(selected.id)}
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100"
