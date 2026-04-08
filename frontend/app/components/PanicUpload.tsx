@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
-  AlertCircle,
-  ArrowRight,
   CalendarClock,
   CheckCircle2,
   ChevronLeft,
@@ -14,14 +12,13 @@ import {
   FileText,
   Pencil,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Upload,
 } from "lucide-react";
 import { buildICS, downloadICS } from "@/lib/calendar/ics";
 import { extractDeadlines } from "@/lib/extract/extractor";
 import type { DeadlineCandidate } from "@/lib/extract/models";
-import { parsePDF, type ParsedPDFPage } from "@/lib/parser/pdfParser";
+import type { ParsedPDFPage } from "@/lib/parser/pdfParser";
 import { cn } from "@/lib/utils";
 import { Inspector } from "./Inspector";
 
@@ -235,6 +232,7 @@ export default function PanicUpload() {
     setManualCandidates([]);
 
     try {
+      const { parsePDF } = await import("@/lib/parser/pdfParser");
       const result = await parsePDF(file);
       setPages(result.metadata.pages);
       setParsedPages(result.pages);
@@ -376,11 +374,6 @@ export default function PanicUpload() {
     if (!activePage) return [];
     return segmentPreviewText(activePage.text, 320);
   }, [activePage]);
-
-  const pageCandidates = useMemo(() => {
-    if (!activePageNumber) return [];
-    return displayCandidates.filter((candidate) => candidatePageMap.get(candidate.id) === activePageNumber);
-  }, [activePageNumber, candidatePageMap, displayCandidates]);
 
   useEffect(() => {
     if (displayCandidates.length === 0) {
@@ -592,107 +585,43 @@ export default function PanicUpload() {
     setActivePageNumber(nextPageNumber);
   }
 
-  const triageSummary = [
-    {
-      label: "Ready",
-      value: String(highConfidenceCount),
-      detail: "Clear enough to export",
-      tone: "text-emerald-700",
-    },
-    {
-      label: "Review",
-      value: String(reviewCount),
-      detail: "Quick check recommended",
-      tone: "text-amber-700",
-    },
-    {
-      label: "Fix",
-      value: String(unclearCount),
-      detail: "Needs correction first",
-      tone: "text-rose-700",
-    },
-  ];
-
   return (
-    <div className="app-surface relative overflow-hidden">
-      <div className={cn("border-b border-[#dde3d9] bg-[#f4f7f2] px-6 sm:px-8", rawText ? "py-4" : "py-6")}>
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="metric-pill">Cueforth PanicButton</div>
-              {rawText ? (
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Modules loaded
-                </div>
-              ) : null}
-            </div>
-            <h1
-              className={cn(
-                "font-display leading-tight tracking-[-0.03em] text-slate-950",
-                rawText ? "mt-4 text-3xl sm:text-[2.4rem]" : "mt-5 text-4xl sm:text-5xl"
-              )}
-            >
-              {rawText ? "Review one course outline in a familiar module layout." : "Turn one syllabus into a clear course checklist."}
+    <div className="space-y-6">
+      <div className="paper-panel px-6 py-6 sm:px-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="metric-pill">Cueforth PanicButton</div>
+            <h1 className="font-display mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+              {rawText ? "Review the extracted deadlines." : "Upload your syllabus."}
             </h1>
-            <p
-              className={cn(
-                "max-w-2xl text-slate-600",
-                rawText ? "mt-3 text-sm leading-7 sm:text-base" : "mt-4 text-base leading-8"
-              )}
-            >
+            <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
               {rawText
-                ? "Move through the detected rows the way students already read course pages: clear sections, visible source context, and obvious next actions."
-                : "Upload the syllabus, review the surfaced deadlines, correct anything uncertain, and leave with a calendar file you can trust."}
+                ? "Check the dates, fix anything uncertain, and export a calendar file when it looks right."
+                : "Drop in a PDF and PanicButton will pull out likely deadlines for you to review."}
             </p>
-
-            <div className={cn("flex flex-wrap items-center gap-3", rawText ? "mt-4" : "mt-6")}>
-              <button onClick={() => fileInputRef.current?.click()} className="action-primary">
-                <Upload className="h-4 w-4" />
-                Upload syllabus PDF
-              </button>
-              {rawText ? (
-                <button onClick={addManualDeadline} className="action-secondary">
-                  <Pencil className="h-4 w-4" />
-                  Add manual item
-                </button>
-              ) : null}
-              {status ? <div className="metric-pill">{loading ? "Processing" : status}</div> : null}
-            </div>
           </div>
 
-          <div className="paper-panel px-5 py-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="eyebrow">{rawText ? "Course status" : "Upload status"}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {pages ? `${pages} pages read` : "Awaiting upload"}
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {triageSummary.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3"
-                >
-                  <div className="text-sm font-semibold text-slate-900">{item.label}</div>
-                  <div className={cn("mt-3 text-2xl font-semibold", item.tone)}>{item.value}</div>
-                  <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{item.detail}</div>
-                </div>
-              ))}
-            </div>
-
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => fileInputRef.current?.click()} className="action-primary">
+              <Upload className="h-4 w-4" />
+              Upload PDF
+            </button>
             {rawText ? (
-              <div className="mt-4 annotation-note px-4 py-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Keyboard shortcuts</div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">
-                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">J/K move</span>
-                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">E edit</span>
-                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">A confirm</span>
-                  <span className="rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1.5">X dismiss</span>
-                </div>
-              </div>
+              <button onClick={addManualDeadline} className="action-secondary">
+                <Pencil className="h-4 w-4" />
+                Add item
+              </button>
             ) : null}
           </div>
         </div>
+
+        {(status || rawText) ? (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {status ? <div className="metric-pill">{loading ? "Processing" : status}</div> : null}
+            {rawText ? <div className="metric-pill">{displayCandidates.length} deadlines found</div> : null}
+            {rawText ? <div className="metric-pill">{reviewCount + unclearCount} need review</div> : null}
+          </div>
+        ) : null}
       </div>
 
       <input
@@ -708,599 +637,357 @@ export default function PanicUpload() {
         }}
       />
 
-      <div className="px-6 py-6 sm:px-8">
-        {!rawText ? (
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_320px]">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => fileInputRef.current?.click()}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onKeyDown={handleUploadKeyDown}
-              className={cn(
-                "paper-panel ruled-paper relative overflow-hidden border-2 border-[#c7d5c5] px-6 py-7 text-left outline-none transition-all duration-200 sm:px-8 sm:py-8",
-                dragActive && "upload-zone-active"
-              )}
-            >
-              <div className="absolute right-6 top-6 rounded-[14px] border border-[#d7ddd4] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                Drag or browse
-              </div>
-
-              <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#2f5e3d] text-white shadow-[0_12px_32px_rgba(36,74,48,0.18)]">
-                <Upload className="h-6 w-6" />
-              </div>
-
-              <div className="mt-8 max-w-2xl">
-                <div className="eyebrow">Start here</div>
-                <div className="font-display mt-3 text-5xl leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-6xl">
-                  Upload the course outline.
-                </div>
-                <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-                  PanicButton reads the syllabus, surfaces likely deadlines, and lays them out like the course tools
-                  students already know how to scan.
-                </p>
-              </div>
-
-              <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                {[
-                  "Upload the syllabus PDF.",
-                  "Review surfaced dates with context.",
-                  "Export a calendar that feels safe.",
-                ].map((step, index) => (
-                  <div key={step} className="annotation-note px-4 py-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">0{index + 1}</div>
-                    <div className="mt-3 text-sm font-semibold leading-6 text-slate-900">{step}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8 rounded-[22px] border border-[#dfe5dc] bg-white/95 px-5 py-5">
-                <div className="eyebrow">Looks for</div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {["Assignments", "Midterms", "Finals", "Labs", "Projects", "Readings"].map((label) => (
-                    <span
-                      key={label}
-                      className="rounded-[999px] border border-[#d7ddd4] bg-[#f6f8f4] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center gap-2 text-sm font-semibold text-slate-950">
-                Open file picker
-                <ArrowRight className="h-4 w-4" />
-              </div>
+      {!rawText ? (
+        <div className="mx-auto max-w-3xl">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onKeyDown={handleUploadKeyDown}
+            className={cn(
+              "paper-panel border-2 border-dashed border-[#cfd6ce] px-6 py-14 text-center outline-none transition-all duration-200 sm:px-10",
+              dragActive && "upload-zone-active"
+            )}
+          >
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#2f5e3d] text-white">
+              <Upload className="h-6 w-6" />
             </div>
+            <h2 className="mt-6 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              Drop in a syllabus PDF.
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
+              PanicButton looks for assignment, exam, lab, and project dates so you can review them in one place.
+            </p>
 
-            <div className="space-y-4">
-              <div className="paper-panel px-5 py-5">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <FileText className="h-4 w-4 text-[#2f5e3d]" />
-                  Example course cues
-                </div>
-                <div className="mt-5 space-y-3">
-                  {[
-                    { date: "Sep 18", text: "Lab 1 due before class begins." },
-                    { date: "Oct 06", text: "Midterm exam covers weeks 1 through 5." },
-                    { date: "Nov 21", text: "Project checkpoint presentation." },
-                  ].map((item) => (
-                    <div key={item.text} className="rounded-[18px] border border-[#dfe5dc] bg-[#f8fbf7] px-4 py-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 text-sm leading-6 text-slate-700">{item.text}</div>
-                        <div className="rounded-[999px] bg-[#eef4ec] px-3 py-1.5 text-xs font-semibold text-[#2f5e3d]">
-                          {item.date}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="annotation-note px-5 py-5">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <ShieldCheck className="h-4 w-4 text-emerald-700" />
-                  Trust stays visible
-                </div>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Students can see what was matched, what still needs attention, and what is ready to leave the page.
-                </p>
-              </div>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              {["Assignments", "Midterms", "Finals", "Labs", "Projects"].map((label) => (
+                <span key={label} className="metric-pill">
+                  {label}
+                </span>
+              ))}
             </div>
           </div>
-        ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.28fr)_360px]">
-            <section className="space-y-4">
-              <div className="paper-panel px-4 py-4">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="eyebrow">Module controls</div>
-                    <div className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Filter and sort the detected rows</div>
+        </div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="space-y-4">
+            <div className="paper-panel px-4 py-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="space-y-2">
+                  <div className="eyebrow">Search</div>
+                  <div className="field-shell flex items-center gap-3">
+                    <Search className="h-4 w-4 text-slate-400" />
+                    <input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Search deadlines"
+                      className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    />
                   </div>
-                  <div className="metric-pill">{displayCandidates.length} visible items</div>
-                </div>
-                <div className="grid gap-3 xl:grid-cols-[1.25fr_repeat(3,minmax(0,0.8fr))]">
-                  <label className="space-y-2">
-                    <div className="eyebrow">Search</div>
-                    <div className="field-shell flex items-center gap-3">
-                      <Search className="h-4 w-4 text-slate-400" />
-                      <input
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Title, type, date, or snippet"
-                        className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                      />
-                    </div>
-                  </label>
+                </label>
 
-                  <label className="space-y-2">
-                    <div className="eyebrow">Sort</div>
-                    <div className="relative">
-                      <SlidersHorizontal className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={sort}
-                        onChange={(event) => setSort(event.target.value as "date-asc" | "date-desc" | "confidence-desc")}
-                        className="field-shell-select w-full pl-11"
-                      >
-                        <option value="date-asc">Date (earliest)</option>
-                        <option value="date-desc">Date (latest)</option>
-                        <option value="confidence-desc">Confidence (high)</option>
-                      </select>
-                    </div>
-                  </label>
+                <label className="space-y-2">
+                  <div className="eyebrow">Sort</div>
+                  <div className="relative">
+                    <SlidersHorizontal className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <select
+                      value={sort}
+                      onChange={(event) => setSort(event.target.value as "date-asc" | "date-desc" | "confidence-desc")}
+                      className="field-shell-select w-full pl-11"
+                    >
+                      <option value="date-asc">Date (earliest)</option>
+                      <option value="date-desc">Date (latest)</option>
+                      <option value="confidence-desc">Confidence (high)</option>
+                    </select>
+                  </div>
+                </label>
 
-                  <label className="space-y-2">
-                    <div className="eyebrow">Min confidence</div>
-                    <div className="field-shell">
-                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        <span>Threshold</span>
-                        <span>{minConfidence}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={minConfidence}
-                        onChange={(event) => setMinConfidence(clamp(Number(event.target.value), 0, 100))}
-                        className="mt-3 w-full accent-slate-950"
-                      />
+                <label className="space-y-2">
+                  <div className="eyebrow">Min confidence</div>
+                  <div className="field-shell">
+                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      <span>Threshold</span>
+                      <span>{minConfidence}%</span>
                     </div>
-                  </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={minConfidence}
+                      onChange={(event) => setMinConfidence(clamp(Number(event.target.value), 0, 100))}
+                      className="mt-3 w-full accent-[#2f5e3d]"
+                    />
+                  </div>
+                </label>
 
-                  <label className="space-y-2">
-                    <div className="eyebrow">Assumed year</div>
-                    <div className="field-shell flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Year</span>
-                      <input
-                        type="number"
-                        value={defaultYear}
-                        onChange={(event) => setDefaultYear(clamp(Number(event.target.value || defaultYear), 1900, 2100))}
-                        className="w-24 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
-                      />
-                    </div>
-                  </label>
-                </div>
+                <label className="space-y-2">
+                  <div className="eyebrow">Assumed year</div>
+                  <div className="field-shell flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Year</span>
+                    <input
+                      type="number"
+                      value={defaultYear}
+                      onChange={(event) => setDefaultYear(clamp(Number(event.target.value || defaultYear), 1900, 2100))}
+                      className="w-24 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
+                    />
+                  </div>
+                </label>
               </div>
+            </div>
 
-              {displayCandidates.length === 0 ? (
-                <div className="paper-panel px-8 py-12 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-amber-100 text-amber-700">
-                    <FileSearch className="h-6 w-6" />
-                  </div>
-                  <div className="mt-5 text-2xl font-semibold text-slate-950">No rows match the current filters.</div>
-                  <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
-                    Lower the confidence threshold, widen the search, or add a manual row if the syllabus still has
-                    something important missing.
-                  </p>
+            {displayCandidates.length === 0 ? (
+              <div className="paper-panel px-8 py-12 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-amber-100 text-amber-700">
+                  <FileSearch className="h-6 w-6" />
                 </div>
-              ) : (
-                <div className="paper-panel overflow-hidden">
-                  <div className="border-b border-[#dde3d9] bg-[#eef3ec] px-5 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-lg font-semibold tracking-tight text-slate-950">Detected deadlines</div>
-                        <div className="mt-1 text-sm text-slate-500">
-                          Review these rows like module items, then open the side panel when a date needs correction.
+                <div className="mt-5 text-2xl font-semibold text-slate-950">No deadlines match the current filters.</div>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-600">
+                  Lower the confidence threshold, change the search, or add an item manually.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {displayCandidates.map((candidate) => {
+                  const date = formatDate(candidate.dateISO);
+                  const isActive = activeId === candidate.id;
+                  const confidence = confidenceMeta(candidate.confidence);
+                  const cue = confidenceCue(candidate.confidence);
+                  const pageNumber = candidatePageMap.get(candidate.id);
+
+                  return (
+                    <div
+                      key={candidate.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveId(candidate.id)}
+                      onFocus={() => setActiveId(candidate.id)}
+                      onKeyDown={(event) => {
+                        const key = event.key.toLowerCase();
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          setActiveId(candidate.id);
+                          setInspectorOpen(true);
+                        } else if (event.key === " ") {
+                          event.preventDefault();
+                          setActiveId(candidate.id);
+                        } else if (key === "a") {
+                          event.preventDefault();
+                          markCandidateChecked(candidate.id);
+                        } else if (key === "x") {
+                          event.preventDefault();
+                          removeCandidate(candidate.id);
+                        } else if (key === "e") {
+                          event.preventDefault();
+                          setActiveId(candidate.id);
+                          setInspectorOpen(true);
+                        }
+                      }}
+                      className={cn(
+                        "triage-row outline-none",
+                        candidate.confidence < 60 && "border-[#efc4b6] bg-[#fffdf9]",
+                        isActive && "triage-row-active"
+                      )}
+                    >
+                      <div className="grid gap-4 lg:grid-cols-[84px_minmax(0,1fr)_170px]">
+                        <div className="border-b border-[#e5e9e3] pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{date.month}</div>
+                          <div className="font-display mt-1 text-4xl leading-none tracking-[-0.04em] text-slate-950">{date.day}</div>
+                          {candidate.time24h ? (
+                            <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                              <Clock3 className="h-3.5 w-3.5" />
+                              {candidate.time24h}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                      <div className="metric-pill">Modules</div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-2.5 px-3 py-3">
-                    {displayCandidates.map((candidate) => {
-                      const date = formatDate(candidate.dateISO);
-                      const isActive = activeId === candidate.id;
-                      const confidence = confidenceMeta(candidate.confidence);
-                      const cue = confidenceCue(candidate.confidence);
-                      const pageNumber = candidatePageMap.get(candidate.id);
-
-                      return (
-                        <div
-                          key={candidate.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setActiveId(candidate.id)}
-                          onFocus={() => setActiveId(candidate.id)}
-                          onKeyDown={(event) => {
-                            const key = event.key.toLowerCase();
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              setActiveId(candidate.id);
-                              setInspectorOpen(true);
-                            } else if (event.key === " ") {
-                              event.preventDefault();
-                              setActiveId(candidate.id);
-                            } else if (key === "a") {
-                              event.preventDefault();
-                              markCandidateChecked(candidate.id);
-                            } else if (key === "x") {
-                              event.preventDefault();
-                              removeCandidate(candidate.id);
-                            } else if (key === "e") {
-                              event.preventDefault();
-                              setActiveId(candidate.id);
-                              setInspectorOpen(true);
-                            }
-                          }}
-                          className={cn(
-                            "triage-row outline-none",
-                            candidate.confidence < 60 && "border-[#efc4b6] bg-[#fffdf9]",
-                            isActive && "triage-row-active"
-                          )}
-                        >
-                          <div className="grid gap-4 lg:grid-cols-[82px_minmax(0,1fr)_188px]">
-                            <div className="border-b border-[#e3e8e1] pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{date.month}</div>
-                            <div className="font-display mt-1.5 text-4xl leading-none tracking-[-0.04em] text-slate-950">
-                              {date.day}
-                            </div>
-                            <div className="mt-2 text-[11px] leading-5 text-slate-500">{date.detail}</div>
-                            {candidate.time24h ? (
-                              <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-                                <Clock3 className="h-3.5 w-3.5" />
-                                {candidate.time24h}
-                              </div>
-                            ) : null}
-                            {pageNumber ? (
-                              <div className="mt-2.5 rounded-[999px] bg-[#eef4ec] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#2f5e3d]">
-                                Page {pageNumber}
-                              </div>
-                            ) : null}
-                            </div>
-
-                            <div className="min-w-0">
-                            <div className="text-lg font-semibold tracking-tight text-slate-950">
-                              {candidate.title || "Untitled deadline"}
-                            </div>
-                            <div className="mt-2.5 flex flex-wrap gap-2">
-                              <div
-                                className={cn(
-                                  "rounded-[999px] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                                  typeTone(candidate.type)
-                                )}
-                              >
-                                {candidate.type}
-                              </div>
-                              {candidate.flags.includes("manual_entry") ? (
-                                <div className="rounded-[999px] bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                                  Manual
-                                </div>
-                              ) : null}
-                              {candidate.flags.includes("conditional_event") ? (
-                                <div className="rounded-[999px] bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                                  Conditional
-                                </div>
-                              ) : null}
-                              {candidate.flags.includes("manually_reviewed") ? (
-                                <div className="rounded-[999px] bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                                  Checked
-                                </div>
-                              ) : null}
-                            </div>
-
-                            <div className={cn("mt-3 rounded-[14px] border px-4 py-3", confidenceSnippetTone(candidate.confidence))}>
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                  Matched in syllabus
-                                </div>
-                                <div className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", cue.tone)}>
-                                  {cue.label}
-                                </div>
-                              </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-700">{evidenceSnippet(candidate)}</p>
-                            </div>
-
-                            <div className="mt-2.5 flex flex-wrap gap-2 text-xs text-slate-500">
-                              {candidate.evidence.matchedDateText ? (
-                                <span className="rounded-[999px] border border-[#d7ddd4] bg-[#f6f8f4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                                  {candidate.evidence.matchedDateText}
-                                </span>
-                              ) : null}
-                              {candidate.evidence.matchedKeywords.slice(0, 3).map((keyword) => (
-                                <span
-                                  key={keyword}
-                                  className="rounded-[999px] bg-[#edf2fb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-800"
-                                >
-                                  {keyword}
-                                </span>
-                              ))}
-                              {candidate.evidence.matchedKeywords.length > 3 ? (
-                                <span className="rounded-[999px] bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-                                  +{candidate.evidence.matchedKeywords.length - 3}
-                                </span>
-                              ) : null}
-                            </div>
-                            </div>
-
-                            <div className="flex flex-col gap-2.5 lg:items-end">
-                            <div className={cn("confidence-pill", confidence.tone)}>
-                              <span className="h-2 w-2 rounded-full bg-current" />
-                              {confidence.label}
-                            </div>
-                            <div className="text-sm font-semibold text-slate-900">{candidate.confidence}%</div>
-                            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{confidence.detail}</div>
-
-                            <div className="mt-1 flex flex-wrap gap-2 lg:justify-end">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  markCandidateChecked(candidate.id);
-                                }}
-                                className="rounded-[12px] border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-100"
-                              >
-                                A Checked
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setActiveId(candidate.id);
-                                  setInspectorOpen(true);
-                                }}
-                                className="rounded-[12px] border border-[#d7ddd4] bg-[#f6f8f4] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#edf3eb]"
-                              >
-                                E Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  removeCandidate(candidate.id);
-                                }}
-                                className="rounded-[12px] border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition-colors hover:bg-rose-100"
-                              >
-                                X Dismiss
-                              </button>
-                            </div>
-                            </div>
+                        <div className="min-w-0">
+                          <div className="text-lg font-semibold tracking-tight text-slate-950">
+                            {candidate.title || "Untitled deadline"}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </section>
 
-            <aside className="space-y-4">
-              <div className={cn("paper-panel px-5 py-5", lastExport?.kind === "ics" && "border-emerald-200 bg-[#f8fcf8]")}>
-                {lastExport ? (
-                  <>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                      Calendar export ready
-                    </div>
-                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      This course now has a working deadline file.
-                    </h3>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {lastExport.count} deadline{lastExport.count === 1 ? "" : "s"} exported as{" "}
-                      {lastExport.kind === "ics" ? ".ics" : "CSV"}. Next step: import it into Google Calendar, Apple
-                      Calendar, or Outlook and get this course off your mental stack.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <CalendarClock className="h-4 w-4 text-[#2f5e3d]" />
-                      Calendar export
-                    </div>
-                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                      Send the confirmed rows somewhere safe.
-                    </h3>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {exportableCandidates.length} visible deadline{exportableCandidates.length === 1 ? "" : "s"} are ready to leave the
-                      page. Export `.ics` first if you want the cleanest handoff.
-                    </p>
-                  </>
-                )}
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <button
-                    onClick={exportICS}
-                    disabled={exportableCandidates.length === 0}
-                    className="action-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Download className="h-4 w-4" />
-                    Export .ics
-                  </button>
-                  <button
-                    onClick={exportCSV}
-                    disabled={exportableCandidates.length === 0}
-                    className="action-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Download CSV
-                  </button>
-                </div>
-
-                <div className="mt-5 annotation-note px-4 py-4">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
-                    <div className="text-sm leading-7 text-slate-600">
-                      Export is based on the rows currently visible in the module list. Tighten filters first if you want a smaller release.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="paper-panel px-5 py-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <FileText className="h-4 w-4 text-[#2f5e3d]" />
-                    Source document
-                  </div>
-                  {activePage ? (
-                    <div className="rounded-[999px] bg-[#eef4ec] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f5e3d]">
-                      Page {activePage.pageNumber}
-                    </div>
-                  ) : null}
-                </div>
-
-                {parsedPages.length > 0 ? (
-                  <>
-                    <div className="mt-4 flex items-center gap-2">
-                      <button
-                        onClick={() => movePage(-1)}
-                        disabled={!activePageNumber || activePageNumber <= 1}
-                        className="rounded-[14px] border border-[#d7ddd4] bg-white p-2 text-slate-700 transition-colors hover:bg-[#f8faf7] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      <div className="flex-1 overflow-x-auto">
-                        <div className="flex gap-2 pb-1">
-                          {parsedPages.map((page) => {
-                            const count = pageCounts.get(page.pageNumber) ?? 0;
-                            const isCurrentPage = activePageNumber === page.pageNumber;
-
-                            return (
-                              <button
-                                key={page.pageNumber}
-                                onClick={() => setActivePageNumber(page.pageNumber)}
-                                className={cn(
-                                  "min-w-fit rounded-[14px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
-                                  isCurrentPage
-                                    ? "border-[#2f5e3d] bg-[#2f5e3d] text-white"
-                                    : "border-[#d7ddd4] bg-white text-slate-700 hover:bg-[#f8faf7]"
-                                )}
-                              >
-                                Page {page.pageNumber}
-                                {count > 0 ? ` · ${count}` : ""}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => movePage(1)}
-                        disabled={!activePageNumber || activePageNumber >= parsedPages.length}
-                        className="rounded-[14px] border border-[#d7ddd4] bg-white p-2 text-slate-700 transition-colors hover:bg-[#f8faf7] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="mt-4 grid gap-3">
-                      <div className="annotation-note px-4 py-4">
-                        <div className="eyebrow">
-                          {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber
-                            ? "Pinned evidence on this page"
-                            : "Page note"}
-                        </div>
-                        <p className="mt-2 text-sm leading-7 text-slate-700">
-                          {activeCandidate && activeCandidatePageNumber === activePage?.pageNumber
-                            ? evidenceSnippet(activeCandidate)
-                            : pageCandidates.length > 0
-                              ? `${pageCandidates.length} extracted row${pageCandidates.length === 1 ? "" : "s"} currently map to this page.`
-                              : "No extracted deadlines are currently pinned to this page."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 max-h-[460px] overflow-y-auto pr-1">
-                      <div className="document-sheet px-4 py-4">
-                        <div className="pointer-events-none absolute inset-y-0 left-12 w-px bg-[#d6dfd4]" />
-                        <div className="pointer-events-none absolute right-4 top-4 rounded-[999px] border border-[#d7ddd4] bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Extracted page text
-                        </div>
-                        <div className="space-y-3">
-                          {pageSegments.map((segment, index) => {
-                            const isHighlighted =
-                              !!activePageNeedle && normalizeSpace(segment).toLowerCase().includes(activePageNeedle.toLowerCase());
-
-                            return (
-                              <div key={`${index}-${segment.slice(0, 24)}`} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3">
-                                <div className="pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                  {String(index + 1).padStart(2, "0")}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "rounded-r-[14px] border px-4 py-3 text-sm leading-7 transition-colors",
-                                    isHighlighted
-                                      ? "border-[#f0ba75] bg-[#fff1dc] text-slate-900 shadow-[inset_4px_0_0_0_#f0ba75]"
-                                      : "border-[#dfe5dc] bg-white/88 text-slate-700"
-                                  )}
-                                >
-                                  {segment}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="eyebrow">Rows on this page</div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {pageCandidates.length > 0 ? (
-                          pageCandidates.map((candidate) => (
-                            <button
-                              key={candidate.id}
-                              onClick={() => setActiveId(candidate.id)}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <div
                               className={cn(
-                                "rounded-[999px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
-                                activeId === candidate.id
-                                  ? "border-[#2f5e3d] bg-[#2f5e3d] text-white"
-                                  : "border-[#d7ddd4] bg-white text-slate-700 hover:bg-[#f8faf7]"
+                                "rounded-[999px] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                                typeTone(candidate.type)
                               )}
                             >
-                              {candidate.title}
+                              {candidate.type}
+                            </div>
+                            {pageNumber ? <div className="metric-pill">Page {pageNumber}</div> : null}
+                            {candidate.flags.includes("manual_entry") ? <div className="metric-pill">Manual</div> : null}
+                          </div>
+
+                          <div className={cn("mt-3 rounded-[14px] border px-4 py-3", confidenceSnippetTone(candidate.confidence))}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                Evidence
+                              </div>
+                              <div className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", cue.tone)}>{cue.label}</div>
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-700">{evidenceSnippet(candidate)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 lg:items-end">
+                          <div className={cn("confidence-pill", confidence.tone)}>
+                            <span className="h-2 w-2 rounded-full bg-current" />
+                            {confidence.label}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 lg:justify-end">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setActiveId(candidate.id);
+                                setInspectorOpen(true);
+                              }}
+                              className="rounded-[12px] border border-[#cfd6ce] bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition-colors hover:bg-[#fafbf9]"
+                            >
+                              Edit
                             </button>
-                          ))
-                        ) : (
-                          <div className="text-sm text-slate-500">No extracted deadlines currently mapped to this page.</div>
-                        )}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                markCandidateChecked(candidate.id);
+                              }}
+                              className="rounded-[12px] border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 transition-colors hover:bg-emerald-100"
+                            >
+                              Confirm
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <p className="mt-4 text-sm leading-7 text-slate-600">Upload a document to open the page viewer.</p>
-                )}
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <aside className="space-y-4">
+            <div className={cn("paper-panel px-5 py-5", lastExport?.kind === "ics" && "border-emerald-200 bg-[#f8fcf8]")}>
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                {lastExport ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <CalendarClock className="h-4 w-4 text-[#2f5e3d]" />}
+                {lastExport ? "Export complete" : "Export"}
               </div>
 
-              {unclearCount > 0 ? (
-                <div className="annotation-note px-5 py-5">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">Start with the rows that need attention</div>
-                      <p className="mt-2 text-sm leading-7 text-slate-600">
-                        Start with the rows marked unclear. The review panel keeps the detected value visible while you
-                        make the correction.
-                      </p>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                {lastExport
+                  ? `${lastExport.count} deadline${lastExport.count === 1 ? "" : "s"} exported as ${lastExport.kind === "ics" ? ".ics" : "CSV"}.`
+                  : `${highConfidenceCount} ready, ${reviewCount} to review, ${unclearCount} unclear.`}
+              </p>
+
+              <div className="mt-5 grid gap-3">
+                <button
+                  onClick={exportICS}
+                  disabled={exportableCandidates.length === 0}
+                  className="action-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  Export .ics
+                </button>
+                <button
+                  onClick={exportCSV}
+                  disabled={exportableCandidates.length === 0}
+                  className="action-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Download CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="paper-panel px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <FileText className="h-4 w-4 text-[#2f5e3d]" />
+                  Source document
+                </div>
+                {activePage ? <div className="metric-pill">Page {activePage.pageNumber}</div> : null}
+              </div>
+
+              {parsedPages.length > 0 ? (
+                <>
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      onClick={() => movePage(-1)}
+                      disabled={!activePageNumber || activePageNumber <= 1}
+                      className="rounded-[12px] border border-[#cfd6ce] bg-white p-2 text-slate-700 transition-colors hover:bg-[#fafbf9] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <div className="flex-1 overflow-x-auto">
+                      <div className="flex gap-2 pb-1">
+                        {parsedPages.map((page) => {
+                          const count = pageCounts.get(page.pageNumber) ?? 0;
+                          const isCurrentPage = activePageNumber === page.pageNumber;
+
+                          return (
+                            <button
+                              key={page.pageNumber}
+                              onClick={() => setActivePageNumber(page.pageNumber)}
+                              className={cn(
+                                "min-w-fit rounded-[12px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors",
+                                isCurrentPage
+                                  ? "border-[#2f5e3d] bg-[#2f5e3d] text-white"
+                                  : "border-[#cfd6ce] bg-white text-slate-700 hover:bg-[#fafbf9]"
+                              )}
+                            >
+                              Page {page.pageNumber}
+                              {count > 0 ? ` · ${count}` : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => movePage(1)}
+                      disabled={!activePageNumber || activePageNumber >= parsedPages.length}
+                      className="rounded-[12px] border border-[#cfd6ce] bg-white p-2 text-slate-700 transition-colors hover:bg-[#fafbf9] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 max-h-[460px] overflow-y-auto">
+                    <div className="document-sheet px-4 py-4">
+                      <div className="space-y-3">
+                        {pageSegments.map((segment, index) => {
+                          const isHighlighted =
+                            !!activePageNeedle && normalizeSpace(segment).toLowerCase().includes(activePageNeedle.toLowerCase());
+
+                          return (
+                            <div key={`${index}-${segment.slice(0, 24)}`} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+                              <div className="pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                {String(index + 1).padStart(2, "0")}
+                              </div>
+                              <div
+                                className={cn(
+                                  "rounded-[12px] border px-4 py-3 text-sm leading-7 transition-colors",
+                                  isHighlighted ? "border-[#f0ba75] bg-[#fff4e3] text-slate-900" : "border-[#dde2db] bg-white text-slate-700"
+                                )}
+                              >
+                                {segment}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </aside>
-          </div>
-        )}
-      </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm leading-7 text-slate-600">Upload a document to open the source text.</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       <Inspector
         selected={inspectorOpen ? activeCandidate : null}

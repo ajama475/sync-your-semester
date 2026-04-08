@@ -1,7 +1,19 @@
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf";
+type PDFJSModule = typeof import("pdfjs-dist/legacy/build/pdf");
 
-if (typeof window !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.js`;
+let pdfjsModulePromise: Promise<PDFJSModule> | null = null;
+
+async function getPDFJS() {
+  if (!pdfjsModulePromise) {
+    pdfjsModulePromise = import("pdfjs-dist/legacy/build/pdf").then((module) => {
+      if (typeof window !== "undefined") {
+        module.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${module.version}/legacy/build/pdf.worker.min.js`;
+      }
+
+      return module;
+    });
+  }
+
+  return pdfjsModulePromise;
 }
 
 interface TextRun {
@@ -141,6 +153,7 @@ function groupRunsIntoLines(runs: TextRun[]) {
 
 export async function parsePDF(file: File): Promise<ParseResult> {
   try {
+    const pdfjs = await getPDFJS();
     const arrayBuffer = await file.arrayBuffer();
     const documentParams: Parameters<typeof pdfjs.getDocument>[0] & { disableWorker?: boolean } = {
       data: arrayBuffer,
