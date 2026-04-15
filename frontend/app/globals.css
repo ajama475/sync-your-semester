@@ -41,8 +41,7 @@
   --tag-purple-text: #6940a5;
 
   /* Typography */
-  --font: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Helvetica, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif;
 
   /* Radius — small, functional (not bubbly) */
   --radius-sm: 3px;
@@ -842,17 +841,9 @@ a {
   overflow-y: auto;
   padding: 24px;
   display: flex;
-  justify-content: center;
-}
-
-.review-pdf__page {
-  width: 100%;
-  max-width: 520px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 32px 28px;
-  min-height: 600px;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 .review-pdf__empty {
@@ -864,53 +855,41 @@ a {
   font-size: 14px;
 }
 
-/* Mock text lines */
-.pdf-mock-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 16px 0;
-}
-
-.pdf-mock-line {
-  height: 8px;
-  background: var(--border);
-  border-radius: 4px;
-  opacity: 0.6;
-}
-
-/* Detection region */
-.review-pdf__detection {
+.review-pdf__page-frame {
   position: relative;
-  margin: 20px 0;
-  padding: 16px;
-  border: 1.5px solid var(--accent);
+  width: fit-content;
+  max-width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--accent-light);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
 }
 
-.review-pdf__detection-label {
+.review-pdf__canvas-element {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.review-pdf__highlight-box {
   position: absolute;
-  top: -10px;
-  left: 12px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--bg);
-  background: var(--accent);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  border: 2px solid rgba(35, 131, 226, 0.95);
+  background: rgba(35, 131, 226, 0.15);
+  box-shadow: 0 0 0 1px rgba(35, 131, 226, 0.12);
+  pointer-events: none;
 }
 
-.review-pdf__quote {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--text);
-  font-style: italic;
-  border: none;
-  padding: 0;
+.review-pdf__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .review-highlight {
@@ -920,6 +899,59 @@ a {
   font-style: italic;
   padding: 1px 2px;
   border-radius: 2px;
+}
+
+.review-pdf__render-error {
+  width: 100%;
+  max-width: 760px;
+  font-size: 12px;
+  color: var(--tag-orange-text);
+  background: var(--tag-orange-bg);
+  border: 1px solid rgba(217, 115, 13, 0.18);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.review-pdf__source-lines {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.review-pdf__source-lines-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.review-pdf__source-lines-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.review-pdf__source-line {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.review-pdf__source-line:first-child {
+  border-top: 0;
+}
+
+.review-pdf__source-line--selected {
+  color: var(--text);
+  background: rgba(35, 131, 226, 0.08);
 }
 
 /* PDF controls */
@@ -959,6 +991,11 @@ a {
   color: var(--text);
 }
 
+.review-pdf__zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .review-pdf__zoom-level {
   font-size: 12px;
   font-weight: 500;
@@ -975,6 +1012,10 @@ a {
   height: calc(100vh - 0px);
   overflow: hidden;
   background: var(--bg);
+}
+
+.review-queue--empty {
+  width: 100%;
 }
 
 .review-queue__header {
@@ -1117,6 +1158,38 @@ a {
   color: var(--text-tertiary);
   margin-top: 8px;
   font-weight: 500;
+}
+
+.review-card__reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.review-card__reason {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.review-card__reason--positive {
+  background: var(--tag-green-bg);
+  color: var(--tag-green-text);
+}
+
+.review-card__reason--negative {
+  background: var(--tag-orange-bg);
+  color: var(--tag-orange-text);
+}
+
+.review-card__reason--neutral {
+  background: var(--tag-gray-bg);
+  color: var(--tag-gray-text);
 }
 
 /* Action buttons */
@@ -1419,6 +1492,9 @@ a {
 .upload-file-item__meta {
   margin-top: 4px;
   padding-left: 24px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .upload-file-item__size {

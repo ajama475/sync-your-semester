@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { loadPdfDocument } from "../../../lib/pdf/loadPdfDocument";
+import {
+  listSyllabusRecords,
+  patchSyllabusRecord,
+} from "../../../lib/storage/syllabusStore";
+
+const SETUP_STORAGE_KEY = "sys-semester-setup";
 
 /* ---- Icons ---- */
 
@@ -42,7 +51,8 @@ function IconEdit() {
 }
 
 function IconChevron({ direction = "right" }) {
-  const rotation = direction === "left" ? "rotate(180)" : "";
+  const rotation = direction === "left" ? "rotate(180deg)" : undefined;
+
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: rotation }}>
       <polyline points="9 18 15 12 9 6" />
@@ -71,114 +81,7 @@ function IconZoomOut() {
   );
 }
 
-/* ---- Mock data ---- */
-
-const mockItems = [
-  {
-    id: 1,
-    course: "HIST 202",
-    title: "Midterm Research Paper",
-    dueDate: "Oct 18, 2024",
-    dueDateRaw: "2024-10-18",
-    confidence: 92,
-    extraction: "automatic",
-    snippet:
-      '...the Midterm Research Paper (30% of final grade) must be uploaded to the portal by Friday, October 18th at 11:59 PM EST. Late submissions will...',
-    highlightedTerms: ["Midterm Research Paper", "Friday, October 18th"],
-    detectionId: "042",
-    sourcePage: 4,
-    sourceFile: "SYLLABUS_HIST202_FALL24.PDF",
-    totalPages: 12,
-    status: "pending",
-  },
-  {
-    id: 2,
-    course: "CS 301",
-    title: "Final Group Project",
-    dueDate: "Dec 12, 2024",
-    dueDateRaw: "2024-12-12",
-    confidence: 84,
-    extraction: "automatic",
-    snippet:
-      '...the Final Group Project proposal (worth 25%) is due by December 12th. Each group must submit a working prototype along with...',
-    highlightedTerms: ["Final Group Project", "December 12th"],
-    detectionId: "017",
-    sourcePage: 7,
-    sourceFile: "CS301_SYLLABUS_F24.PDF",
-    totalPages: 9,
-    status: "pending",
-  },
-  {
-    id: 3,
-    course: "ECON 101",
-    title: "Quiz 4: Market Dynamics",
-    dueDate: "Sep 30, 2024",
-    dueDateRaw: "2024-09-30",
-    confidence: 98,
-    extraction: "automatic",
-    snippet:
-      '...Quiz 4 covering Market Dynamics (Chapters 8-10) will be held on September 30th during class time. The quiz is worth 5% of your final...',
-    highlightedTerms: ["Quiz 4", "September 30th"],
-    detectionId: "008",
-    sourcePage: 3,
-    sourceFile: "ECON101_COURSE_OUTLINE.PDF",
-    totalPages: 6,
-    status: "pending",
-  },
-  {
-    id: 4,
-    course: "BIOL 440",
-    title: "Lab Report 3: Enzyme Kinetics",
-    dueDate: "Nov 5, 2024",
-    dueDateRaw: "2024-11-05",
-    confidence: 81,
-    extraction: "automatic",
-    snippet:
-      '...Lab Report #3 on Enzyme Kinetics must follow APA format and is due November 5th. Reports submitted after the deadline will receive...',
-    highlightedTerms: ["Lab Report #3", "November 5th"],
-    detectionId: "023",
-    sourcePage: 5,
-    sourceFile: "BIOL440_SYLLABUS.PDF",
-    totalPages: 8,
-    status: "pending",
-  },
-  {
-    id: 5,
-    course: "MATH 225",
-    title: "Problem Set 7",
-    dueDate: "Oct 28, 2024",
-    dueDateRaw: "2024-10-28",
-    confidence: 95,
-    extraction: "automatic",
-    snippet:
-      '...Problem Set 7 covers sections 5.1 through 5.4 and is due Monday, October 28th. Solutions must be handwritten and stapled...',
-    highlightedTerms: ["Problem Set 7", "October 28th"],
-    detectionId: "031",
-    sourcePage: 2,
-    sourceFile: "MATH225_SYLLABUS_F24.PDF",
-    totalPages: 5,
-    status: "pending",
-  },
-  {
-    id: 6,
-    course: "HIST 202",
-    title: "Primary Source Analysis",
-    dueDate: "Nov 15, 2024",
-    dueDateRaw: "2024-11-15",
-    confidence: 73,
-    extraction: "automatic",
-    snippet:
-      '...students will submit a Primary Source Analysis (10%) by November 15. The analysis should be 4-6 pages examining a document from...',
-    highlightedTerms: ["Primary Source Analysis", "November 15"],
-    detectionId: "044",
-    sourcePage: 5,
-    sourceFile: "SYLLABUS_HIST202_FALL24.PDF",
-    totalPages: 12,
-    status: "pending",
-  },
-];
-
-/* ---- Confidence helpers ---- */
+/* ---- Helpers ---- */
 
 function confidenceClass(score) {
   if (score >= 90) return "tag tag--green";
@@ -192,426 +95,690 @@ function confidenceIcon(score) {
   return "!";
 }
 
+function formatDueDate(dateString) {
+  if (!dateString) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${dateString}T00:00:00`));
+}
+
+function stripExtension(filename) {
+  return filename.replace(/\.[^/.]+$/, "");
+}
+
+function readSetupCourses() {
+  try {
+    const raw = localStorage.getItem(SETUP_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.courses) ? parsed.courses : [];
+  } catch {
+    return [];
+  }
+}
+
+function courseLabel(courseId, courses, filename) {
+  const course = courses.find((entry) => entry.id === courseId);
+  if (!course) return stripExtension(filename);
+  if (course.code) return course.code;
+  return course.code || course.name || stripExtension(filename);
+}
+
+function itemStatusText(status) {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Automatic extraction";
+}
+
+function updateNestedItem(items, itemId, updater) {
+  return items.map((item) => (item.id === itemId ? updater(item) : item));
+}
+
 /* ---- Render snippet with highlights ---- */
 
 function SnippetText({ text, terms }) {
   if (!terms || terms.length === 0) return <span>{text}</span>;
 
-  const regex = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  const escapedTerms = terms
+    .filter(Boolean)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+  if (escapedTerms.length === 0) return <span>{text}</span>;
+
+  const regex = new RegExp(`(${escapedTerms.join("|")})`, "gi");
   const parts = text.split(regex);
 
   return (
     <>
-      {parts.map((part, i) => {
-        const isHighlight = terms.some((t) => t.toLowerCase() === part.toLowerCase());
+      {parts.map((part, index) => {
+        const isHighlight = terms.some((term) => term.toLowerCase() === part.toLowerCase());
         return isHighlight ? (
-          <mark key={i} className="review-highlight">{part}</mark>
+          <mark key={index} className="review-highlight">
+            {part}
+          </mark>
         ) : (
-          <span key={i}>{part}</span>
+          <span key={index}>{part}</span>
         );
       })}
     </>
   );
 }
 
-/* ---- PDF mock lines ---- */
+/* ---- PDF viewer ---- */
 
-function MockPdfLines({ count = 5 }) {
+function PdfViewer({ record, selectedItem, currentPage, zoom }) {
+  const canvasRef = useRef(null);
+  const pdfCacheRef = useRef(new Map());
+  const [renderState, setRenderState] = useState({
+    loading: false,
+    error: null,
+    width: 0,
+    height: 0,
+  });
+
+  const currentPageData = useMemo(
+    () => record?.parseResult?.pages?.find((page) => page.pageNumber === currentPage) ?? null,
+    [record, currentPage]
+  );
+
+  useEffect(() => {
+    let didCancel = false;
+
+    async function renderPage() {
+      if (!record?.fileBlob || !canvasRef.current) {
+        setRenderState((prev) => ({ ...prev, loading: false }));
+        return;
+      }
+
+      setRenderState((prev) => ({ ...prev, loading: true, error: null }));
+
+      try {
+        let pdfDocument = pdfCacheRef.current.get(record.id);
+
+        if (!pdfDocument) {
+          pdfDocument = await loadPdfDocument(record.fileBlob);
+          pdfCacheRef.current.set(record.id, pdfDocument);
+        }
+
+        const pdfPage = await pdfDocument.getPage(currentPage);
+        const viewport = pdfPage.getViewport({ scale: zoom });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext("2d");
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+
+        await pdfPage.render({
+          canvasContext: context,
+          viewport,
+        }).promise;
+
+        if (didCancel) return;
+
+        setRenderState({
+          loading: false,
+          error: null,
+          width: viewport.width,
+          height: viewport.height,
+        });
+      } catch (error) {
+        console.error("Failed to render review page.", error);
+
+        if (didCancel) return;
+
+        setRenderState((prev) => ({
+          ...prev,
+          loading: false,
+          error: "The PDF page could not be rendered. The parsed source is still shown below.",
+        }));
+      }
+    }
+
+    void renderPage();
+
+    return () => {
+      didCancel = true;
+    };
+  }, [record, currentPage, zoom]);
+
+  const highlight =
+    selectedItem && currentPage === selectedItem.sourcePage
+      ? selectedItem.sourceBounds
+      : null;
+
+  const frameWidth = renderState.width || (currentPageData ? currentPageData.width * zoom : 0);
+  const frameHeight = renderState.height || (currentPageData ? currentPageData.height * zoom : 0);
+
   return (
-    <div className="pdf-mock-lines">
-      {Array.from({ length: count }).map((_, i) => (
+    <div className="review-pdf__canvas">
+      {!record ? (
+        <div className="review-pdf__empty">
+          <p>Select an item from the review queue to see its source.</p>
+        </div>
+      ) : (
         <div
-          key={i}
-          className="pdf-mock-line"
-          style={{ width: `${60 + Math.random() * 35}%` }}
-        />
-      ))}
+          className="review-pdf__page-frame"
+          style={{
+            width: frameWidth || undefined,
+            minHeight: frameHeight || undefined,
+          }}
+        >
+          <canvas ref={canvasRef} className="review-pdf__canvas-element" />
+
+          {highlight && (
+            <div
+              className="review-pdf__highlight-box"
+              style={{
+                left: `${highlight.left * zoom}px`,
+                top: `${highlight.top * zoom}px`,
+                width: `${highlight.width * zoom}px`,
+                height: `${Math.max(highlight.height * zoom, 18)}px`,
+              }}
+            />
+          )}
+
+          {renderState.loading && (
+            <div className="review-pdf__loading">Rendering page…</div>
+          )}
+        </div>
+      )}
+
+      {renderState.error && (
+        <div className="review-pdf__render-error">{renderState.error}</div>
+      )}
+
+      {currentPageData && (
+        <div className="review-pdf__source-lines">
+          <div className="review-pdf__source-lines-label">Parsed source lines on this page</div>
+          <div className="review-pdf__source-lines-list">
+            {currentPageData.lines.map((line) => {
+              const isSelectedLine =
+                selectedItem &&
+                currentPage === selectedItem.sourcePage &&
+                line.indexStart < selectedItem.sourceIndexEnd &&
+                line.indexEnd > selectedItem.sourceIndexStart;
+
+              return (
+                <div
+                  key={`${line.pageNumber}-${line.indexStart}`}
+                  className={`review-pdf__source-line${isSelectedLine ? " review-pdf__source-line--selected" : ""}`}
+                >
+                  {line.text}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ---- Page ---- */
 
-export default function ReviewPage() {
-  const [items, setItems] = useState(mockItems);
-  const [selectedId, setSelectedId] = useState(mockItems[0]?.id ?? null);
+function ReviewPageContent() {
+  const searchParams = useSearchParams();
+  const requestedFileId = searchParams.get("file");
+
+  const [records, setRecords] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState({});
+  const [editDraft, setEditDraft] = useState({ title: "", dueDate: "" });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setCourses(readSetupCourses());
+
+    listSyllabusRecords()
+      .then((nextRecords) => {
+        if (!isMounted) return;
+        setRecords(nextRecords.filter((record) => Array.isArray(record.reviewItems) && record.reviewItems.length > 0));
+      })
+      .catch((error) => {
+        console.error("Failed to load review queue.", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const items = useMemo(
+    () =>
+      records.flatMap((record) =>
+        record.reviewItems.map((item) => ({
+          ...item,
+          clientId: `${record.id}:${item.id}`,
+          recordId: record.id,
+          course: courseLabel(record.courseId, courses, record.name),
+          sourceFile: record.name,
+          totalPages: record.parseResult?.metadata?.pages ?? record.parseResult?.pages?.length ?? 1,
+        }))
+      ),
+    [records, courses]
+  );
 
   const pendingItems = useMemo(
-    () => items.filter((i) => i.status === "pending"),
+    () => items.filter((item) => item.status === "pending"),
     [items]
   );
 
   const selected = useMemo(
-    () => items.find((i) => i.id === selectedId) ?? null,
+    () => items.find((item) => item.clientId === selectedId) ?? null,
     [items, selectedId]
   );
 
+  const selectedRecord = useMemo(
+    () => records.find((record) => record.id === selected?.recordId) ?? null,
+    [records, selected]
+  );
+
   const selectedIndex = useMemo(
-    () => pendingItems.findIndex((i) => i.id === selectedId),
+    () => pendingItems.findIndex((item) => item.clientId === selectedId),
     [pendingItems, selectedId]
   );
 
-  /* Actions */
+  useEffect(() => {
+    if (selected && items.some((item) => item.clientId === selected.clientId && item.status === "pending")) {
+      return;
+    }
+
+    const preferredItems = requestedFileId
+      ? pendingItems.filter((item) => item.recordId === requestedFileId)
+      : [];
+    const nextSelected = preferredItems[0] ?? pendingItems[0] ?? items[0] ?? null;
+
+    setSelectedId(nextSelected?.clientId ?? null);
+  }, [items, pendingItems, requestedFileId, selected]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setCurrentPage(selected.sourcePage);
+    setZoom(1);
+  }, [selected]);
+
+  const updateReviewItem = useCallback(async (recordId, itemId, updater) => {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.id === recordId
+          ? {
+              ...record,
+              reviewItems: updateNestedItem(record.reviewItems, itemId, updater),
+            }
+          : record
+      )
+    );
+
+    try {
+      await patchSyllabusRecord(recordId, (record) => ({
+        ...record,
+        reviewItems: updateNestedItem(record.reviewItems, itemId, updater),
+      }));
+    } catch (error) {
+      console.error("Failed to persist review item changes.", error);
+    }
+  }, []);
+
   const handleApprove = useCallback(
-    (id) => {
-      setItems((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, status: "approved" } : i))
-      );
-      /* Select next pending */
-      const remaining = items.filter((i) => i.status === "pending" && i.id !== id);
-      if (remaining.length) setSelectedId(remaining[0].id);
+    (item) => {
+      void updateReviewItem(item.recordId, item.id, (current) => ({
+        ...current,
+        status: "approved",
+      }));
     },
-    [items]
+    [updateReviewItem]
   );
 
   const handleReject = useCallback(
-    (id) => {
-      setItems((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, status: "rejected" } : i))
-      );
-      const remaining = items.filter((i) => i.status === "pending" && i.id !== id);
-      if (remaining.length) setSelectedId(remaining[0].id);
+    (item) => {
+      void updateReviewItem(item.recordId, item.id, (current) => ({
+        ...current,
+        status: "rejected",
+      }));
     },
-    [items]
+    [updateReviewItem]
   );
 
-  const handleStartEdit = useCallback(
-    (item) => {
-      setEditingId(item.id);
-      setEditDraft({ title: item.title, dueDate: item.dueDateRaw });
-    },
-    []
-  );
+  const handleStartEdit = useCallback((item) => {
+    setEditingId(item.clientId);
+    setEditDraft({
+      title: item.title,
+      dueDate: item.dueDateRaw,
+    });
+  }, []);
 
   const handleSaveEdit = useCallback(
-    (id) => {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === id
-            ? {
-                ...i,
-                title: editDraft.title || i.title,
-                dueDateRaw: editDraft.dueDate || i.dueDateRaw,
-                dueDate: editDraft.dueDate
-                  ? new Intl.DateTimeFormat("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    }).format(new Date(editDraft.dueDate + "T00:00:00"))
-                  : i.dueDate,
-              }
-            : i
-        )
-      );
+    (item) => {
+      void updateReviewItem(item.recordId, item.id, (current) => ({
+        ...current,
+        title: editDraft.title || current.title,
+        dueDateRaw: editDraft.dueDate || current.dueDateRaw,
+      }));
       setEditingId(null);
     },
-    [editDraft]
+    [editDraft, updateReviewItem]
   );
 
   const handleNav = useCallback(
-    (dir) => {
-      const newIdx = selectedIndex + dir;
-      if (newIdx >= 0 && newIdx < pendingItems.length) {
-        setSelectedId(pendingItems[newIdx].id);
+    (direction) => {
+      const nextIndex = selectedIndex + direction;
+      if (nextIndex >= 0 && nextIndex < pendingItems.length) {
+        setSelectedId(pendingItems[nextIndex].clientId);
       }
     },
-    [selectedIndex, pendingItems]
+    [pendingItems, selectedIndex]
   );
 
-  return (
-    <>
+  const reviewedCount = items.length - pendingItems.length;
+
+  if (items.length === 0) {
+    return (
       <div className="review-layout">
-        {/* ======== LEFT: PDF Viewer ======== */}
-        <div className="review-pdf">
-          {/* Toolbar */}
-          <div className="review-pdf__toolbar">
-            <span className="review-pdf__filename">
-              {selected?.sourceFile ?? "No file selected"}
-            </span>
-            {selected && (
-              <span className="review-pdf__page-badge">
-                Page {selected.sourcePage} of {selected.totalPages}
-              </span>
-            )}
+        <div className="review-queue review-queue--empty">
+          <div className="review-queue__done">
+            <p className="review-queue__done-text">No parsed syllabus items are ready for review yet.</p>
+            <Link href="/dashboard/upload" className="btn-primary">
+              Upload a syllabus
+            </Link>
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          {/* PDF Canvas */}
-          <div className="review-pdf__canvas">
-            {selected ? (
-              <div className="review-pdf__page">
-                {/* Simulated text before detection */}
-                <MockPdfLines count={4} />
-
-                {/* Detection region */}
-                <div className="review-pdf__detection">
-                  <span className="review-pdf__detection-label">
-                    Detection {selected.detectionId}
-                  </span>
-                  <blockquote className="review-pdf__quote">
-                    <SnippetText
-                      text={selected.snippet}
-                      terms={selected.highlightedTerms}
-                    />
-                  </blockquote>
-                </div>
-
-                {/* More text after */}
-                <MockPdfLines count={6} />
-              </div>
-            ) : (
-              <div className="review-pdf__empty">
-                <p>Select an item from the review queue to see its source.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom controls */}
+  return (
+    <div className="review-layout">
+      <div className="review-pdf">
+        <div className="review-pdf__toolbar">
+          <span className="review-pdf__filename">{selected?.sourceFile ?? "No file selected"}</span>
           {selected && (
-            <div className="review-pdf__controls">
-              <div className="review-pdf__zoom">
-                <button className="review-pdf__zoom-btn" type="button" aria-label="Zoom out">
-                  <IconZoomOut />
-                </button>
-                <span className="review-pdf__zoom-level">100%</span>
-                <button className="review-pdf__zoom-btn" type="button" aria-label="Zoom in">
-                  <IconZoomIn />
-                </button>
-              </div>
-              <div className="review-pdf__pagination">
-                <button className="review-pdf__zoom-btn" type="button" aria-label="Previous page">
-                  <IconChevron direction="left" />
-                </button>
-                <span className="review-pdf__zoom-level">
-                  {selected.sourcePage} / {selected.totalPages}
-                </span>
-                <button className="review-pdf__zoom-btn" type="button" aria-label="Next page">
-                  <IconChevron direction="right" />
-                </button>
-              </div>
-            </div>
+            <span className="review-pdf__page-badge">
+              Page {currentPage} of {selected.totalPages}
+            </span>
           )}
         </div>
 
-        {/* ======== RIGHT: Review Queue ======== */}
-        <div className="review-queue">
-          {/* Header */}
-          <div className="review-queue__header">
-            <div>
-              <h2 className="review-queue__title">Review Queue</h2>
-              <p className="review-queue__count">
-                {pendingItems.length} pending verification{pendingItems.length !== 1 ? "s" : ""}
-              </p>
+        <PdfViewer
+          record={selectedRecord}
+          selectedItem={selected}
+          currentPage={currentPage}
+          zoom={zoom}
+        />
+
+        {selected && (
+          <div className="review-pdf__controls">
+            <div className="review-pdf__zoom">
+              <button
+                className="review-pdf__zoom-btn"
+                type="button"
+                aria-label="Zoom out"
+                onClick={() => setZoom((prev) => Math.max(prev - 0.15, 0.7))}
+              >
+                <IconZoomOut />
+              </button>
+              <span className="review-pdf__zoom-level">{Math.round(zoom * 100)}%</span>
+              <button
+                className="review-pdf__zoom-btn"
+                type="button"
+                aria-label="Zoom in"
+                onClick={() => setZoom((prev) => Math.min(prev + 0.15, 2))}
+              >
+                <IconZoomIn />
+              </button>
+            </div>
+
+            <div className="review-pdf__pagination">
+              <button
+                className="review-pdf__zoom-btn"
+                type="button"
+                aria-label="Previous page"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              >
+                <IconChevron direction="left" />
+              </button>
+              <span className="review-pdf__zoom-level">
+                {currentPage} / {selected.totalPages}
+              </span>
+              <button
+                className="review-pdf__zoom-btn"
+                type="button"
+                aria-label="Next page"
+                disabled={currentPage >= selected.totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, selected.totalPages))}
+              >
+                <IconChevron direction="right" />
+              </button>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Cards */}
-          <div className="review-queue__list">
-            {pendingItems.length === 0 ? (
-              <div className="review-queue__done">
-                <p className="review-queue__done-text">
-                  All items reviewed. Nice work.
-                </p>
-              </div>
-            ) : (
-              pendingItems.map((item) => {
-                const isSelected = item.id === selectedId;
-                const isEditing = item.id === editingId;
+      <div className="review-queue">
+        <div className="review-queue__header">
+          <div>
+            <h2 className="review-queue__title">Review Queue</h2>
+            <p className="review-queue__count">
+              {pendingItems.length} pending verification{pendingItems.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`review-card${isSelected ? " review-card--selected" : ""}`}
-                    onClick={() => setSelectedId(item.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") setSelectedId(item.id);
-                    }}
-                  >
-                    {/* Top row: course + confidence */}
-                    <div className="review-card__top">
-                      <span className="review-card__course">{item.course}</span>
-                      <span className={confidenceClass(item.confidence)}>
-                        {item.confidence}% {confidenceIcon(item.confidence)}
-                      </span>
-                    </div>
+        <div className="review-queue__list">
+          {pendingItems.length === 0 ? (
+            <div className="review-queue__done">
+              <p className="review-queue__done-text">All extracted items have been reviewed.</p>
+            </div>
+          ) : (
+            pendingItems.map((item) => {
+              const isSelected = item.clientId === selectedId;
+              const isEditing = item.clientId === editingId;
 
-                    {/* Title */}
+              return (
+                <div
+                  key={item.clientId}
+                  className={`review-card${isSelected ? " review-card--selected" : ""}`}
+                  onClick={() => setSelectedId(item.clientId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      setSelectedId(item.clientId);
+                    }
+                  }}
+                >
+                  <div className="review-card__top">
+                    <span className="review-card__course">{item.course}</span>
+                    <span className={confidenceClass(item.confidence)}>
+                      {item.confidence}% {confidenceIcon(item.confidence)}
+                    </span>
+                  </div>
+
+                  {isEditing ? (
+                    <input
+                      className="inline-input"
+                      type="text"
+                      value={editDraft.title}
+                      autoFocus
+                      onChange={(event) =>
+                        setEditDraft((draft) => ({ ...draft, title: event.target.value }))
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") handleSaveEdit(item);
+                        if (event.key === "Escape") setEditingId(null);
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                    />
+                  ) : (
+                    <h3 className="review-card__title">{item.title}</h3>
+                  )}
+
+                  <div className="review-card__date">
+                    <IconCalendar />
                     {isEditing ? (
                       <input
                         className="inline-input"
-                        type="text"
-                        value={editDraft.title}
-                        autoFocus
-                        onChange={(e) =>
-                          setEditDraft((d) => ({ ...d, title: e.target.value }))
+                        type="date"
+                        value={editDraft.dueDate}
+                        onChange={(event) =>
+                          setEditDraft((draft) => ({
+                            ...draft,
+                            dueDate: event.target.value,
+                          }))
                         }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveEdit(item.id);
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        style={{ maxWidth: 160 }}
                       />
                     ) : (
-                      <h3 className="review-card__title">{item.title}</h3>
-                    )}
-
-                    {/* Date */}
-                    <div className="review-card__date">
-                      <IconCalendar />
-                      {isEditing ? (
-                        <input
-                          className="inline-input"
-                          type="date"
-                          value={editDraft.dueDate}
-                          onChange={(e) =>
-                            setEditDraft((d) => ({
-                              ...d,
-                              dueDate: e.target.value,
-                            }))
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ maxWidth: 160 }}
-                        />
-                      ) : (
-                        <>
-                          <span className="review-card__date-label">
-                            Due Date
-                          </span>
-                          <span className="review-card__date-value">
-                            {item.dueDate}
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Expanded details */}
-                    {isSelected && (
                       <>
-                        <div className="review-card__snippet-section">
-                          <span className="review-card__snippet-label">
-                            Source snippet
-                          </span>
-                          <p className="review-card__snippet">
-                            &ldquo;
-                            <SnippetText
-                              text={item.snippet}
-                              terms={item.highlightedTerms}
-                            />
-                            &rdquo;
-                          </p>
-                        </div>
-
-                        <div className="review-card__extraction">
-                          {item.extraction === "automatic"
-                            ? "Automatic extraction"
-                            : "Manual entry"}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="review-card__actions">
-                          <button
-                            className="review-action review-action--reject"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReject(item.id);
-                            }}
-                          >
-                            <IconX /> Reject
-                          </button>
-
-                          {isEditing ? (
-                            <button
-                              className="review-action review-action--edit"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSaveEdit(item.id);
-                              }}
-                            >
-                              <IconCheck /> Save
-                            </button>
-                          ) : (
-                            <button
-                              className="review-action review-action--edit"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStartEdit(item);
-                              }}
-                            >
-                              <IconEdit /> Edit
-                            </button>
-                          )}
-
-                          <button
-                            className="review-action review-action--approve"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleApprove(item.id);
-                            }}
-                          >
-                            <IconCheck /> Approve
-                          </button>
-                        </div>
+                        <span className="review-card__date-label">Due Date</span>
+                        <span className="review-card__date-value">{formatDueDate(item.dueDateRaw)}</span>
                       </>
                     )}
-
-                    {/* Collapsed chevron */}
-                    {!isSelected && (
-                      <span className="review-card__chevron">
-                        <IconChevron />
-                      </span>
-                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
 
-          {/* Bottom navigation */}
-          {pendingItems.length > 0 && (
-            <div className="review-queue__footer">
-              <div className="review-queue__progress">
-                <div className="review-queue__progress-bar">
-                  <div
-                    className="review-queue__progress-fill"
-                    style={{
-                      width: `${((mockItems.length - pendingItems.length) / mockItems.length) * 100}%`,
-                    }}
-                  />
+                  {isSelected && (
+                    <>
+                      <div className="review-card__snippet-section">
+                        <span className="review-card__snippet-label">Source snippet</span>
+                        <p className="review-card__snippet">
+                          &ldquo;
+                          <SnippetText text={item.snippet} terms={item.highlightedTerms} />
+                          &rdquo;
+                        </p>
+                      </div>
+
+                      {item.reasons?.length > 0 && (
+                        <div className="review-card__reason-list">
+                          {item.reasons.slice(0, 3).map((reason) => (
+                            <span
+                              key={`${item.clientId}-${reason.code}`}
+                              className={`review-card__reason review-card__reason--${reason.impact}`}
+                            >
+                              {reason.detail}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="review-card__extraction">
+                        {itemStatusText(item.status)} · page {item.sourcePage}
+                      </div>
+
+                      <div className="review-card__actions">
+                        <button
+                          className="review-action review-action--reject"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleReject(item);
+                          }}
+                        >
+                          <IconX /> Reject
+                        </button>
+
+                        {isEditing ? (
+                          <button
+                            className="review-action review-action--edit"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleSaveEdit(item);
+                            }}
+                          >
+                            <IconCheck /> Save
+                          </button>
+                        ) : (
+                          <button
+                            className="review-action review-action--edit"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleStartEdit(item);
+                            }}
+                          >
+                            <IconEdit /> Edit
+                          </button>
+                        )}
+
+                        <button
+                          className="review-action review-action--approve"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleApprove(item);
+                          }}
+                        >
+                          <IconCheck /> Approve
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {!isSelected && (
+                    <span className="review-card__chevron">
+                      <IconChevron />
+                    </span>
+                  )}
                 </div>
-                <span className="review-queue__progress-text">
-                  {mockItems.length - pendingItems.length} of {mockItems.length} reviewed
-                </span>
-              </div>
-
-              <div className="review-queue__nav">
-                <button
-                  className="btn-ghost"
-                  type="button"
-                  disabled={selectedIndex <= 0}
-                  onClick={() => handleNav(-1)}
-                >
-                  Previous
-                </button>
-                <button
-                  className="btn-primary"
-                  type="button"
-                  disabled={selectedIndex >= pendingItems.length - 1}
-                  onClick={() => handleNav(1)}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+              );
+            })
           )}
         </div>
+
+        {pendingItems.length > 0 && (
+          <div className="review-queue__footer">
+            <div className="review-queue__progress">
+              <div className="review-queue__progress-bar">
+                <div
+                  className="review-queue__progress-fill"
+                  style={{
+                    width: `${items.length === 0 ? 0 : (reviewedCount / items.length) * 100}%`,
+                  }}
+                />
+              </div>
+              <span className="review-queue__progress-text">
+                {reviewedCount} of {items.length} reviewed
+              </span>
+            </div>
+
+            <div className="review-queue__nav">
+              <button
+                className="btn-ghost"
+                type="button"
+                disabled={selectedIndex <= 0}
+                onClick={() => handleNav(-1)}
+              >
+                Previous
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={selectedIndex >= pendingItems.length - 1}
+                onClick={() => handleNav(1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </>
+    </div>
+  );
+}
+
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={<div className="review-layout" />}>
+      <ReviewPageContent />
+    </Suspense>
   );
 }

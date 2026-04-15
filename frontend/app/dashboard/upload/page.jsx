@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { parseSyllabus } from "../../../lib/parser/pdfParser";
+import {
+  deleteSyllabusRecord,
+  listSyllabusRecords,
+  patchSyllabusRecord,
+  putSyllabusRecord,
+} from "../../../lib/storage/syllabusStore";
+
+const SETUP_STORAGE_KEY = "sys-semester-setup";
 
 /* ---- Icons ---- */
 
@@ -44,10 +54,10 @@ function IconLink() {
 
 const STATUS_CONFIG = {
   uploading: { label: "Uploading", className: "tag tag--gray" },
-  parsing:   { label: "Parsing…", className: "tag tag--blue" },
-  ready:     { label: "Ready", className: "tag tag--green" },
+  parsing: { label: "Parsing…", className: "tag tag--blue" },
+  ready: { label: "Ready", className: "tag tag--green" },
   attention: { label: "Attention", className: "tag tag--orange" },
-  error:     { label: "Error", className: "tag tag--red" },
+  error: { label: "Error", className: "tag tag--red" },
 };
 
 /* ---- Helpers ---- */
@@ -60,127 +70,320 @@ function formatFileSize(bytes) {
 
 function truncateName(name, max = 28) {
   if (name.length <= max) return name;
-  const ext = name.slice(name.lastIndexOf("."));
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
   return name.slice(0, max - ext.length - 1) + "…" + ext;
+}
+
+function getSemesterSetup() {
+  try {
+    const raw = localStorage.getItem(SETUP_STORAGE_KEY);
+    if (!raw) {
+      return {
+        courses: [],
+        semester: {},
+      };
+    }
+
+    const parsed = JSON.parse(raw);
+    const startDateISO = parsed?.semesterDates?.startDate || undefined;
+    const endDateISO = parsed?.semesterDates?.endDate || undefined;
+
+    return {
+      courses: Array.isArray(parsed?.courses) ? parsed.courses : [],
+      semester: {
+        startDateISO,
+        endDateISO,
+        defaultYear: startDateISO ? Number(startDateISO.slice(0, 4)) : undefined,
+      },
+    };
+  } catch {
+    return {
+      courses: [],
+      semester: {},
+    };
+  }
+}
+
+function createUploadId() {
+  return `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function summarizeRecord(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    size: record.size,
+    status: record.status,
+    courseId: record.courseId || "",
+    message: record.message || null,
+    taskCount: record.reviewItems?.length ?? 0,
+  };
+}
+
+function sanitizeParseResult(parsed) {
+  return {
+    pages: parsed.pages,
+    warnings: parsed.warnings,
+    hasExtractableText: parsed.hasExtractableText,
+    metadata: parsed.metadata,
+  };
+}
+
+function buildReviewItems(parsed) {
+  return parsed.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    type: task.type,
+    dueDateRaw: task.dueDateISO,
+    confidence: task.confidence,
+    extraction: "automatic",
+    snippet: task.sourceText,
+    highlightedTerms: Array.from(new Set([task.title, task.matchedDateText].filter(Boolean))),
+    detectionId: task.id.slice(-6),
+    sourcePage: task.pageNumber,
+    sourceBounds: task.sourceBounds,
+    sourceIndexStart: task.sourceIndexStart,
+    sourceIndexEnd: task.sourceIndexEnd,
+    matchedDateText: task.matchedDateText,
+    matchedKeywords: task.matchedKeywords,
+    sectionHint: task.sectionHint,
+    reasons: task.reasons,
+    status: "pending",
+  }));
+}
+
+function getRecordOutcome(parsed, reviewItems) {
+  if (!parsed.hasExtractableText) {
+    return {
+      status: "attention",
+      message: "This PDF does not contain selectable text. Review may require manual cleanup.",
+    };
+  }
+
+  if (reviewItems.length === 0) {
+    return {
+      status: "attention",
+      message: "No strong deadline candidates were found. This syllabus likely needs manual review.",
+    };
+  }
+
+  if (parsed.warnings.length > 0) {
+    return {
+      status: "ready",
+      message: parsed.warnings[0].message,
+    };
+  }
+
+  return {
+    status: "ready",
+    message: null,
+  };
+}
+
+function courseOptionLabel(course) {
+  if (course.code && course.name) return `${course.code}: ${course.name}`;
+  return course.code || course.name || "Untitled course";
 }
 
 /* ---- Upload Page ---- */
 
 export default function UploadPage() {
+  const router = useRouter();
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [courses, setCourses] = useState([]);
+  const [semester, setSemester] = useState({});
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
 
-  /* Load courses from localStorage (saved during setup) */
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("sys-semester-setup");
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.courses) setCourses(data.courses);
-      }
-    } catch {
-      /* ignore parse errors */
-    }
-  }, []);
+    const setup = getSemesterSetup();
+    setCourses(setup.courses);
+    setSemester(setup.semester);
 
-  /* Simulate parsing after upload */
-  const simulateParsing = useCallback((fileId) => {
-    /* Phase 1: uploading → parsing */
-    setTimeout(() => {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === fileId ? { ...f, status: "parsing" } : f))
-      );
+    let isMounted = true;
 
-      /* Phase 2: parsing → ready or attention (random for demo) */
-      setTimeout(() => {
-        const isClean = Math.random() > 0.3;
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileId
-              ? {
-                  ...f,
-                  status: isClean ? "ready" : "attention",
-                  message: isClean
-                    ? null
-                    : "Dates are blurry or non-standard format.",
-                }
-              : f
-          )
-        );
-      }, 1800 + Math.random() * 1200);
-    }, 600);
-  }, []);
-
-  function addFiles(fileList) {
-    const newFiles = Array.from(fileList)
-      .filter((f) => f.type === "application/pdf" || f.name.endsWith(".pdf"))
-      .map((f) => {
-        const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        return {
-          id,
-          name: f.name,
-          size: f.size,
-          status: "uploading",
-          courseId: "",
-          message: null,
-          file: f,
-        };
+    listSyllabusRecords()
+      .then((records) => {
+        if (!isMounted) return;
+        setFiles(records.map(summarizeRecord));
+      })
+      .catch((error) => {
+        console.error("Failed to load saved syllabi.", error);
       });
 
-    if (newFiles.length === 0) return;
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-    setFiles((prev) => [...prev, ...newFiles]);
-    newFiles.forEach((f) => simulateParsing(f.id));
-  }
+  const updateFileSummary = useCallback((fileId, updater) => {
+    setFiles((prev) =>
+      prev.map((file) => (file.id === fileId ? { ...file, ...updater(file) } : file))
+    );
+  }, []);
 
-  /* Drag handlers */
-  function handleDragEnter(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  const processUploadedFile = useCallback(
+    async (file, fileId) => {
+      const baseRecord = {
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        status: "uploading",
+        courseId: "",
+        message: null,
+        fileBlob: file,
+        parseResult: null,
+        reviewItems: [],
+        createdAt: Date.now(),
+      };
+
+      try {
+        await putSyllabusRecord(baseRecord);
+
+        updateFileSummary(fileId, () => ({
+          status: "parsing",
+          message: null,
+        }));
+
+        await patchSyllabusRecord(fileId, (record) => ({
+          ...record,
+          status: "parsing",
+          message: null,
+        }));
+
+        const parsed = await parseSyllabus(file, {
+          semester,
+          minConfidence: 52,
+        });
+        const reviewItems = buildReviewItems(parsed);
+        const outcome = getRecordOutcome(parsed, reviewItems);
+
+        const nextRecord = await patchSyllabusRecord(fileId, (record) => ({
+          ...record,
+          status: outcome.status,
+          message: outcome.message,
+          parseResult: sanitizeParseResult(parsed),
+          reviewItems,
+        }));
+
+        updateFileSummary(fileId, () => summarizeRecord(nextRecord));
+      } catch (error) {
+        console.error("Failed to parse syllabus.", error);
+
+        await patchSyllabusRecord(fileId, (record) => ({
+          ...record,
+          status: "error",
+          message: "We couldn't read this PDF. Try another file or a cleaner export.",
+        })).catch(() => {});
+
+        updateFileSummary(fileId, () => ({
+          status: "error",
+          message: "We couldn't read this PDF. Try another file or a cleaner export.",
+        }));
+      }
+    },
+    [semester, updateFileSummary]
+  );
+
+  const addFiles = useCallback(
+    (fileList) => {
+      const existingKeys = new Set(files.map((file) => `${file.name}-${file.size}`));
+      const acceptedFiles = Array.from(fileList).filter((file) => {
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        const isDuplicate = existingKeys.has(`${file.name}-${file.size}`);
+        return isPdf && !isDuplicate;
+      });
+
+      if (acceptedFiles.length === 0) return;
+
+      const nextFiles = acceptedFiles.map((file) => ({
+        id: createUploadId(),
+        name: file.name,
+        size: file.size,
+        status: "uploading",
+        courseId: "",
+        message: null,
+        taskCount: 0,
+      }));
+
+      setFiles((prev) => [...nextFiles, ...prev]);
+      nextFiles.forEach((nextFile, index) => {
+        void processUploadedFile(acceptedFiles[index], nextFile.id);
+      });
+    },
+    [files, processUploadedFile]
+  );
+
+  function handleDragEnter(event) {
+    event.preventDefault();
+    event.stopPropagation();
     dragCounter.current += 1;
     setIsDragging(true);
   }
 
-  function handleDragLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
     dragCounter.current -= 1;
-    if (dragCounter.current === 0) setIsDragging(false);
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
   }
 
-  function handleDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
   }
 
-  function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
     setIsDragging(false);
     dragCounter.current = 0;
-    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+
+    if (event.dataTransfer.files.length > 0) {
+      addFiles(event.dataTransfer.files);
+    }
   }
 
   function handleBrowse() {
     fileInputRef.current?.click();
   }
 
-  function handleFileInput(e) {
-    if (e.target.files.length) addFiles(e.target.files);
-    e.target.value = "";
+  function handleFileInput(event) {
+    if (event.target.files.length > 0) {
+      addFiles(event.target.files);
+    }
+
+    event.target.value = "";
   }
 
-  function handleCourseMap(fileId, courseId) {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, courseId } : f))
-    );
+  async function handleCourseMap(fileId, courseId) {
+    updateFileSummary(fileId, () => ({ courseId }));
+
+    try {
+      await patchSyllabusRecord(fileId, (record) => ({
+        ...record,
+        courseId,
+      }));
+    } catch (error) {
+      console.error("Failed to update course mapping.", error);
+    }
   }
 
-  function handleRemoveFile(fileId) {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+  async function handleRemoveFile(fileId) {
+    setFiles((prev) => prev.filter((file) => file.id !== fileId));
+
+    try {
+      await deleteSyllabusRecord(fileId);
+    } catch (error) {
+      console.error("Failed to remove syllabus.", error);
+    }
+  }
+
+  function handleReview(fileId) {
+    router.push(`/dashboard/review?file=${fileId}`);
   }
 
   return (
@@ -190,9 +393,7 @@ export default function UploadPage() {
       </header>
 
       <div className="upload-layout">
-        {/* ---- Left: Drop zone + info cards ---- */}
         <div className="upload-main">
-          {/* Drop zone */}
           <div
             className={`upload-dropzone${isDragging ? " upload-dropzone--active" : ""}`}
             onDragEnter={handleDragEnter}
@@ -203,17 +404,11 @@ export default function UploadPage() {
             <div className="upload-dropzone__icon">
               <IconCloud />
             </div>
-            <p className="upload-dropzone__title">
-              Drop your syllabus PDFs here
-            </p>
+            <p className="upload-dropzone__title">Drop your syllabus PDFs here</p>
             <p className="upload-dropzone__hint">
-              Supported format: PDF. Maximum file size 25MB per document.
+              Files are parsed locally in your browser, then saved on this device for review.
             </p>
-            <button
-              className="btn-primary"
-              type="button"
-              onClick={handleBrowse}
-            >
+            <button className="btn-primary" type="button" onClick={handleBrowse}>
               Browse files
             </button>
             <input
@@ -226,19 +421,15 @@ export default function UploadPage() {
             />
           </div>
 
-          {/* Info cards */}
           <div className="upload-features">
             <div className="upload-feature-card">
               <span className="upload-feature-card__icon">
                 <IconSpark />
               </span>
               <div>
-                <p className="upload-feature-card__title">
-                  Intelligent Extraction
-                </p>
+                <p className="upload-feature-card__title">Local parser, not black-box AI</p>
                 <p className="upload-feature-card__desc">
-                  Our parser automatically identifies due dates, weights, and
-                  reading requirements from your syllabus.
+                  Dates are extracted with explicit heuristics so you can inspect the source and understand why something was surfaced.
                 </p>
               </div>
             </div>
@@ -248,17 +439,15 @@ export default function UploadPage() {
                 <IconLink />
               </span>
               <div>
-                <p className="upload-feature-card__title">Ledger Mapping</p>
+                <p className="upload-feature-card__title">Source-linked review</p>
                 <p className="upload-feature-card__desc">
-                  Assignments are instantly formatted to fit your master
-                  calendar and scheduling view.
+                  Every candidate task carries its original page, snippet, and highlight bounds into the review screen.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ---- Right: File panel ---- */}
         <div className="upload-panel">
           <div className="upload-panel__section">
             <h3 className="upload-panel__heading">Uploaded files</h3>
@@ -269,68 +458,72 @@ export default function UploadPage() {
               </p>
             ) : (
               <div className="upload-file-list">
-                {files.map((f) => (
-                  <div key={f.id} className="upload-file-item">
+                {files.map((file) => (
+                  <div key={file.id} className="upload-file-item">
                     <div className="upload-file-item__top">
                       <span className="upload-file-item__icon">
                         <IconFile />
                       </span>
-                      <span className="upload-file-item__name" title={f.name}>
-                        {truncateName(f.name)}
+                      <span className="upload-file-item__name" title={file.name}>
+                        {truncateName(file.name)}
                       </span>
-                      <span className={STATUS_CONFIG[f.status]?.className}>
-                        {STATUS_CONFIG[f.status]?.label}
+                      <span className={STATUS_CONFIG[file.status]?.className}>
+                        {STATUS_CONFIG[file.status]?.label}
                       </span>
                     </div>
 
                     <div className="upload-file-item__meta">
-                      <span className="upload-file-item__size">
-                        {formatFileSize(f.size)}
-                      </span>
+                      <span className="upload-file-item__size">{formatFileSize(file.size)}</span>
+                      {file.taskCount > 0 && (
+                        <span className="upload-file-item__size">{file.taskCount} candidate{file.taskCount !== 1 ? "s" : ""}</span>
+                      )}
                     </div>
 
-                    {/* Course mapping — shown when ready */}
-                    {f.status === "ready" && courses.length > 0 && (
+                    {(file.status === "ready" || file.status === "attention") && (
                       <div className="upload-file-item__mapping">
-                        <label className="upload-file-item__mapping-label">
-                          Map to course
-                        </label>
-                        <select
-                          className="upload-file-item__select"
-                          value={f.courseId}
-                          onChange={(e) => handleCourseMap(f.id, e.target.value)}
-                        >
-                          <option value="">Select course…</option>
-                          {courses.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.code ? `${c.code}: ${c.name}` : c.name || c.code}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="btn-ghost upload-file-item__action" type="button">
+                        {courses.length > 0 && (
+                          <>
+                            <label className="upload-file-item__mapping-label">Map to course</label>
+                            <select
+                              className="upload-file-item__select"
+                              value={file.courseId}
+                              onChange={(event) => handleCourseMap(file.id, event.target.value)}
+                            >
+                              <option value="">Select course…</option>
+                              {courses.map((course) => (
+                                <option key={course.id} value={course.id}>
+                                  {courseOptionLabel(course)}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                        <button className="btn-ghost upload-file-item__action" type="button" onClick={() => handleReview(file.id)}>
                           Review extracted data →
                         </button>
                       </div>
                     )}
 
-                    {/* Attention message */}
-                    {f.status === "attention" && (
+                    {file.message && (
                       <div className="upload-file-item__warning">
-                        <p className="upload-file-item__warning-text">
-                          {f.message || "Could not parse reliably."}
-                        </p>
-                        <button className="btn-ghost upload-file-item__action upload-file-item__action--warn" type="button">
-                          Manual override
-                        </button>
+                        <p className="upload-file-item__warning-text">{file.message}</p>
+                        {file.status === "attention" && (
+                          <button
+                            className="btn-ghost upload-file-item__action upload-file-item__action--warn"
+                            type="button"
+                            onClick={() => handleReview(file.id)}
+                          >
+                            Open review
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {/* Remove */}
                     <button
                       className="upload-file-item__remove"
                       type="button"
-                      onClick={() => handleRemoveFile(f.id)}
-                      aria-label={`Remove ${f.name}`}
+                      onClick={() => handleRemoveFile(file.id)}
+                      aria-label={`Remove ${file.name}`}
                     >
                       ×
                     </button>
@@ -340,7 +533,6 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* Capacity */}
           <div className="upload-panel__section">
             <h3 className="upload-panel__heading">Storage</h3>
             <div className="upload-capacity">
@@ -355,7 +547,7 @@ export default function UploadPage() {
                 />
               </div>
               <p className="upload-capacity__note">
-                Local storage. All files stay on your device.
+                PDFs, extracted tasks, and review state stay in local browser storage.
               </p>
             </div>
           </div>
