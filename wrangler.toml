@@ -1,0 +1,12 @@
+name = "sync-your-semester"
+compatibility_date = "2026-04-14"
+
+[build]
+command = "npm ci && npm run build"
+cwd = "frontend"
+watch_dir = "frontend"
+
+[assets]
+directory = "./frontend/out"
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"
