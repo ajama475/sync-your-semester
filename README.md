@@ -1,26 +1,30 @@
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-# Cueforth
+# Sync Your Semester
 
-**Turn course chaos into a plan.**
+Sync Your Semester is a local-first academic planning app for university students who want clarity without building a whole productivity system.
 
-Cueforth is a broader student planning platform built to turn scattered course information into clear next actions.
+The product goal is simple: help students upload their syllabi, verify what matters, and see the semester clearly before deadlines sneak up on them.
 
-Its flagship workflow, **PanicButton**, helps students upload a syllabus, review likely deadlines, and export them to a calendar without digging through multiple long PDFs by hand.
----
+## Product Direction
 
-## Brand Structure
+- Relief and clarity first
+- Proof over automation theater
+- Academic-specific planning, not a generic task manager
+- Minimal setup and fast review
+- Weekly usefulness after syllabus week
 
-- **Brand:** Cueforth
-- **Flagship workflow:** PanicButton
+## Current Focus
 
----
+This repository is being rebuilt around a cleaner foundation for:
 
-## Want More Details?
+- a premium landing experience
+- semester setup and onboarding
+- local-first syllabus upload and review
+- a calm, trustworthy academic workflow
 
-Check out the full documentation:
+## Local Development
 
- https://github.com/ajama475/panicbutton/wiki
-
----
-
-Built to help students find what matters next.
+```bash
+cd frontend
+npm install
+npm run dev
+```
