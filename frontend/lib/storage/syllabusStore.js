@@ -1,6 +1,7 @@
 const DATABASE_NAME = "sync-your-semester";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const SYLLABI_STORE = "syllabi";
+const TASKS_STORE = "tasks";
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -16,6 +17,9 @@ function openDatabase() {
 
       if (!database.objectStoreNames.contains(SYLLABI_STORE)) {
         database.createObjectStore(SYLLABI_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains(TASKS_STORE)) {
+        database.createObjectStore(TASKS_STORE, { keyPath: "id" });
       }
     };
 

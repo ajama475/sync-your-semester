@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-/* ---- SVG Icons ---- */
-
-function IconCalendar() {
+function IconSchedule() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -26,7 +25,7 @@ function IconUpload() {
   );
 }
 
-function IconCheckCircle() {
+function IconReview() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
@@ -35,7 +34,7 @@ function IconCheckCircle() {
   );
 }
 
-function IconList() {
+function IconCourseTasks() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <line x1="8" y1="6" x2="21" y2="6" />
@@ -48,7 +47,7 @@ function IconList() {
   );
 }
 
-function IconCalendarDays() {
+function IconCalendar() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -61,12 +60,11 @@ function IconCalendarDays() {
   );
 }
 
-function IconHorizon() {
+function IconThisWeek() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a10 10 0 010 10" />
-      <path d="M12 2a10 10 0 000 10" />
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }
@@ -82,21 +80,51 @@ function BrandIcon() {
   );
 }
 
-/* ---- Nav config ---- */
-
-const navItems = [
-  { label: "Scheduling", href: "/dashboard", icon: IconCalendar },
-  { label: "Upload Syllabus", href: "/dashboard/upload", icon: IconUpload },
-  { label: "Review", href: "/dashboard/review", icon: IconCheckCircle },
-  { label: "Master Ledger", href: "/dashboard/ledger", icon: IconList },
-  { label: "Horizon View", href: "/dashboard/horizon", icon: IconHorizon },
-  { label: "Calendar", href: "/dashboard/calendar", icon: IconCalendarDays },
+const navSections = [
+  {
+    label: "Semester",
+    items: [
+      { label: "Semester Schedule", href: "/dashboard", icon: IconSchedule },
+      { label: "This Week", href: "/dashboard/thisweek", icon: IconThisWeek },
+      { label: "Calendar", href: "/dashboard/calendar", icon: IconCalendar },
+    ],
+  },
+  {
+    label: "Syllabi",
+    items: [
+      { label: "Upload", href: "/dashboard/upload", icon: IconUpload },
+      { label: "Review", href: "/dashboard/review", icon: IconReview },
+      { label: "Course Tasks", href: "/dashboard/coursetasks", icon: IconCourseTasks },
+    ],
+  },
 ];
-
-/* ---- Layout ---- */
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [setupValid, setSetupValid] = useState(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("sys-semester-setup");
+      if (!raw) { setSetupValid(false); return; }
+      const parsed = JSON.parse(raw);
+      const hasDates = parsed?.semesterDates?.startDate && parsed?.semesterDates?.endDate;
+      const hasCourses = Array.isArray(parsed?.courses) && parsed.courses.some((c) => c.code?.trim() || c.name?.trim());
+      setSetupValid(hasDates && hasCourses);
+    } catch {
+      setSetupValid(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (setupValid === false) {
+      router.replace("/");
+    }
+  }, [setupValid, router]);
+
+  if (setupValid === null) return null;
+  if (setupValid === false) return null;
 
   function isActive(href) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -107,34 +135,30 @@ export default function DashboardLayout({ children }) {
     <div className="dashboard">
       <aside className="sidebar">
         <Link href="/dashboard" className="sidebar-brand">
-          <span className="sidebar-brand__icon">
-            <BrandIcon />
-          </span>
+          <span className="sidebar-brand__icon"><BrandIcon /></span>
           <span className="sidebar-brand__text">Sync Your Semester</span>
         </Link>
 
-        <div className="sidebar-section">
-          <div className="sidebar-section__label">Planning</div>
-          <nav className="sidebar-nav" aria-label="Dashboard navigation">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`sidebar-nav__item${
-                    isActive(item.href) ? " sidebar-nav__item--active" : ""
-                  }`}
-                >
-                  <span className="sidebar-nav__icon">
-                    <Icon />
-                  </span>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        {navSections.map((section) => (
+          <div className="sidebar-section" key={section.label}>
+            <div className="sidebar-section__label">{section.label}</div>
+            <nav className="sidebar-nav">
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar-nav__item${isActive(item.href) ? " sidebar-nav__item--active" : ""}`}
+                  >
+                    <span className="sidebar-nav__icon"><Icon /></span>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        ))}
       </aside>
 
       <section className="main-content">{children}</section>

@@ -235,6 +235,9 @@ const HARD_SUPPRESSION_PATTERNS = [
   /\breading week\b/i,
   /\bno classes\b/i,
   /\buniversity closed\b/i,
+  /\b(?:fall|spring|winter)\s+(?:break|recess)\b/i,
+  /\bholiday\b/i,
+  /\bstatutory holiday\b/i,
 ];
 
 const TABLE_HEADER_PATTERNS = [
@@ -493,10 +496,10 @@ function extractDateMatches(text, semester) {
     "gi"
   );
   const dayFirst = new RegExp(
-    `\\b(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*[-–]\\s*(\\d{1,2})(?:st|nd|rd|th)?)?\\s+(${MONTH_NAME_PATTERN})\\.?\\s*(\\d{2,4})?\\b`,
+    `\\b(?:${WEEKDAY_PATTERN}\\s*,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*[-–]\\s*(\\d{1,2})(?:st|nd|rd|th)?)?\\s+(${MONTH_NAME_PATTERN})\\.?\\s*(\\d{2,4})?\\b`,
     "gi"
   );
-  const numeric = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g;
+  const numeric = /\b(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?\b/g;
 
   let match;
 
@@ -569,6 +572,7 @@ function deriveTitle(sourceText, matchedDateText, type) {
   cleaned = cleaned.replace(/\bworth\s+\d{1,3}\s*%?/gi, " ");
   cleaned = cleaned.replace(/\b([01]?\d|2[0-3]):[0-5]\d\b/gi, " ");
   cleaned = cleaned.replace(/\b(1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(am|pm)\b/gi, " ");
+  cleaned = cleaned.replace(/\b(?:midnight|noon)\b/gi, " ");
   cleaned = cleaned.replace(/[|•●▪■]/g, " ");
   cleaned = cleaned.replace(/\(\s*\d{1,3}\s*%?\s*\)/gi, " ");
   cleaned = cleaned.replace(/\bweek\s+\d+(?:\s*(?:to|-)\s*\d+)?\b/gi, " ");
@@ -648,19 +652,15 @@ function shouldMergeAdjacentLines(current, next, semester) {
  */
 function buildLineContexts(result) {
   const contexts = [];
+  let activeSection = "neutral";
 
   for (const page of result.pages) {
-    let activeSection = "neutral";
-
     for (const line of page.lines) {
       const normalizedText = normalizeWhitespace(line.text);
       if (!normalizedText) continue;
 
       if (looksLikeHeading(normalizedText)) {
-        const hintedSection = classifySectionHint(normalizedText);
-        if (hintedSection !== "neutral") {
-          activeSection = hintedSection;
-        }
+        activeSection = classifySectionHint(normalizedText);
       }
 
       contexts.push({
@@ -885,6 +885,10 @@ function dedupeCandidates(candidates) {
   for (const candidate of candidates) {
     const existingIndex = deduped.findIndex((existing) => {
       if (existing.dueDateISO !== candidate.dueDateISO) return false;
+      
+      const overlaps = Math.max(0, Math.min(existing.sourceIndexEnd, candidate.sourceIndexEnd) - Math.max(existing.sourceIndexStart, candidate.sourceIndexStart)) > 0;
+      if (overlaps) return true;
+
       if (existing.type !== candidate.type) return false;
       return titlesLookEquivalent(existing.title, candidate.title);
     });

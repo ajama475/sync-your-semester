@@ -1652,6 +1652,431 @@ a {
 }
 
 /* ===========================================
+   HORIZON VIEW
+   =========================================== */
+
+.horizon-board {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 0 48px 48px;
+  margin-top: 24px;
+  height: calc(100vh - 120px);
+}
+
+.horizon-bucket {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  max-height: 100%;
+}
+
+.horizon-bucket__header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.horizon-bucket__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.horizon-bucket__count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.horizon-bucket__list {
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.horizon-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  transition: all var(--ease);
+}
+
+.horizon-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+
+.horizon-card--done {
+  opacity: 0.5;
+}
+
+.horizon-card--done .horizon-card__title {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.horizon-card__checkbox {
+  margin-top: 2px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border-strong);
+  appearance: none;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.horizon-card__checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.horizon-card__checkbox:checked::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  border-left: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.horizon-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.horizon-card__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.horizon-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.horizon-card__course {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+
+/* ===========================================
+   CALENDAR VIEW
+   =========================================== */
+
+.calendar-view {
+  padding: 0 48px 48px;
+  margin-top: 24px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.calendar-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.calendar-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.calendar-day-header {
+  background: var(--bg-secondary);
+  padding: 8px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-day-header:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.calendar-cell {
+  position: relative;
+  min-height: 110px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-cell:not(:nth-child(7n)) {
+  border-right: 1px solid var(--border);
+}
+
+.calendar-cell--other-month {
+  background: var(--bg-secondary);
+  opacity: 0.6;
+}
+
+.calendar-cell--today {
+  background: var(--accent-light);
+}
+
+.calendar-cell__date {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-align: right;
+  margin-bottom: 6px;
+}
+
+.calendar-cell--today .calendar-cell__date {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.calendar-cell__events {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-event {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-left: 2px solid transparent;
+}
+
+.calendar-event--done {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.calendar-event--red { border-left-color: var(--tag-red-text); }
+.calendar-event--orange { border-left-color: var(--tag-orange-text); }
+.calendar-event--blue { border-left-color: var(--tag-blue-text); }
+.calendar-event--gray { border-left-color: var(--tag-gray-text); }
+.calendar-event--green { border-left-color: var(--tag-green-text); }
+
+/* Completed row treatment */
+.db-table-row--done {
+  opacity: 0.5;
+}
+.db-table-row--done .cell-task {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+/* ===========================================
+   FIELD VALIDATION
+   =========================================== */
+
+.field__input--error {
+  border-color: var(--tag-red-text);
+}
+
+.field__error {
+  font-size: 12px;
+  color: var(--tag-red-text);
+  margin-top: 2px;
+}
+
+.field__textarea {
+  height: auto;
+  min-height: 56px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+/* ===========================================
+   MODAL
+   =========================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modal-fade-in 120ms ease;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modal-slide-up 160ms ease;
+}
+
+@keyframes modal-slide-up {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.modal__close {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: all var(--ease-fast);
+}
+
+.modal__close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.modal__body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.modal__footer .btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal__loop-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Loop day picks */
+.loop-days {
+  display: flex;
+  gap: 4px;
+}
+
+.loop-day {
+  width: 38px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--ease-fast);
+}
+
+.loop-day:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.loop-day--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+/* ===========================================
    RESPONSIVE
    =========================================== */
 

@@ -1,265 +1,219 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getAllSemesterTasks,
+  getTaskUrgency,
+  toggleTaskCompletion,
+  createTask,
+  readSetup,
+} from "../../lib/tasks/taskHelpers";
 
-/* ---- Sample data ---- */
-
-const initialTaskRows = [
-  {
-    id: 1,
-    task: "Assignment 1 — Binary Search Trees",
-    dueDate: "2026-09-18",
-    urgency: "High",
-    difficulty: 4,
-    status: "Not Started",
-    isNew: false,
-  },
-  {
-    id: 2,
-    task: "Problem Set 2 — Linear Algebra",
-    dueDate: "2026-09-21",
-    urgency: "Medium",
-    difficulty: 3,
-    status: "In Progress",
-    isNew: false,
-  },
-  {
-    id: 3,
-    task: "Quiz 1 — Intro Psych",
-    dueDate: "2026-09-24",
-    urgency: "Low",
-    difficulty: 2,
-    status: "Scheduled",
-    isNew: false,
-  },
-  {
-    id: 4,
-    task: "Midterm Review Plan",
-    dueDate: "2026-09-28",
-    urgency: "High",
-    difficulty: 5,
-    status: "Done",
-    isNew: false,
-  },
-];
-
-/* ---- Helpers ---- */
-
-function formatDate(dateString) {
-  if (!dateString) return "";
-  const date = new Date(`${dateString}T00:00:00`);
+function formatDate(isoDate) {
+  if (!isoDate) return "";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-  }).format(date);
+  }).format(new Date(`${isoDate}T00:00:00`));
 }
 
-/* ---- Badge Components ---- */
-
-function UrgencyTag({ value }) {
-  if (!value) return <span className="cell-placeholder">—</span>;
-  const map = {
-    High: "tag tag--red",
-    Medium: "tag tag--orange",
-    Low: "tag tag--blue",
-  };
-  return <span className={map[value]}>{value}</span>;
+function UrgencyTag({ urgency }) {
+  if (!urgency) return null;
+  return <span className={`tag tag--${urgency.color}`}>{urgency.label}</span>;
 }
 
-function StatusTag({ value }) {
-  if (!value) return <span className="cell-placeholder">—</span>;
-  const map = {
-    "Not Started": "tag tag--gray",
-    "In Progress": "tag tag--yellow",
-    Scheduled: "tag tag--blue",
-    Done: "tag tag--green",
-  };
-  return <span className={map[value]}>{value}</span>;
+function TypeTag({ type }) {
+  if (!type || type === "other") return null;
+  return <span className="tag tag--purple">{type.charAt(0).toUpperCase() + type.slice(1)}</span>;
 }
 
-function DifficultyDots({ value }) {
-  if (!value) return <span className="cell-placeholder">—</span>;
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function TaskModal({ open, onClose, onCreated, courses, semester }) {
+  const [title, setTitle] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [courseId, setCourseId] = useState("");
+  const [type, setType] = useState("other");
+  const [isLoop, setIsLoop] = useState(false);
+  const [loopDays, setLoopDays] = useState([]);
+  const [loopStart, setLoopStart] = useState(semester?.startDate || "");
+  const [loopEnd, setLoopEnd] = useState(semester?.endDate || "");
+  const [notes, setNotes] = useState("");
+
+  function reset() {
+    setTitle(""); setDueDate(""); setCourseId(""); setType("other");
+    setIsLoop(false); setLoopDays([]); setLoopStart(semester?.startDate || "");
+    setLoopEnd(semester?.endDate || ""); setNotes("");
+  }
+
+  function toggleDay(day) {
+    setLoopDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
+  }
+
+  async function handleSubmit() {
+    if (!title.trim()) return;
+    const courseEntry = courses.find((c) => c.id === courseId);
+    const courseLabel = courseEntry ? (courseEntry.code || courseEntry.name) : "—";
+
+    const taskData = {
+      title: title.trim(),
+      dueDate: isLoop ? null : dueDate,
+      courseId: courseId || null,
+      courseLabel,
+      type,
+      notes: notes.trim(),
+      recurrence: isLoop && loopDays.length > 0 ? {
+        days: loopDays,
+        startDate: loopStart,
+        endDate: loopEnd,
+      } : null,
+    };
+
+    await createTask(taskData);
+    reset();
+    onCreated();
+    onClose();
+  }
+
+  if (!open) return null;
+
   return (
-    <div className="dots" aria-label={`Difficulty ${value} of 5`}>
-      {[1, 2, 3, 4, 5].map((dot) => (
-        <span
-          key={dot}
-          className={`dots__dot${dot <= value ? " dots__dot--filled" : ""}`}
-        />
-      ))}
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__header">
+          <h2 className="modal__title">New task</h2>
+          <button className="modal__close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        <div className="modal__body">
+          <label className="field">
+            <span className="field__label">Title</span>
+            <input className="field__input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Assignment 2, Gym, Office Hours" autoFocus />
+          </label>
+
+          <div className="setup-form__row">
+            {courses.length > 0 && (
+              <label className="field">
+                <span className="field__label">Course (optional)</span>
+                <select className="field__input" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+                  <option value="">None</option>
+                  {courses.map((c) => <option key={c.id} value={c.id}>{c.code || c.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="field">
+              <span className="field__label">Type</span>
+              <select className="field__input" value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="other">General</option>
+                <option value="assignment">Assignment</option>
+                <option value="quiz">Quiz</option>
+                <option value="exam">Exam</option>
+                <option value="midterm">Midterm</option>
+                <option value="project">Project</option>
+                <option value="lab">Lab</option>
+                <option value="presentation">Presentation</option>
+                <option value="reading">Reading</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={isLoop} onChange={(e) => setIsLoop(e.target.checked)} className="horizon-card__checkbox" />
+            <span className="field__label" style={{ margin: 0 }}>Recurring task</span>
+          </label>
+
+          {isLoop ? (
+            <div className="modal__loop-section">
+              <div className="field">
+                <span className="field__label">Repeats on</span>
+                <div className="loop-days">
+                  {DAY_LABELS.map((label, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`loop-day${loopDays.includes(idx) ? " loop-day--active" : ""}`}
+                      onClick={() => toggleDay(idx)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="setup-form__row">
+                <label className="field">
+                  <span className="field__label">From</span>
+                  <input className="field__input" type="date" value={loopStart} onChange={(e) => setLoopStart(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="field__label">Until</span>
+                  <input className="field__input" type="date" value={loopEnd} onChange={(e) => setLoopEnd(e.target.value)} />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <label className="field">
+              <span className="field__label">Due date</span>
+              <input className="field__input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </label>
+          )}
+
+          <label className="field">
+            <span className="field__label">Notes (optional)</span>
+            <textarea className="field__input field__textarea" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Any extra context..." />
+          </label>
+        </div>
+
+        <div className="modal__footer">
+          <button className="btn-ghost" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" type="button" onClick={handleSubmit} disabled={!title.trim()}>
+            {isLoop ? "Create recurring task" : "Add task"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ---- Inline Editors ---- */
+export default function SemesterSchedulePage() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
 
-function InlineText({ value, onSave, autoFocus, ariaLabel }) {
-  const [draft, setDraft] = useState(value ?? "");
-  return (
-    <input
-      autoFocus={autoFocus}
-      className="inline-input"
-      type="text"
-      value={draft}
-      aria-label={ariaLabel}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => onSave(draft)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          onSave(draft);
-          e.currentTarget.blur();
-        }
-      }}
-    />
-  );
-}
+  const { courses, semester } = useMemo(() => readSetup(), []);
 
-function InlineDate({ value, onSave, autoFocus, ariaLabel }) {
-  return (
-    <input
-      autoFocus={autoFocus}
-      className="inline-input"
-      type="date"
-      value={value ?? ""}
-      aria-label={ariaLabel}
-      onChange={(e) => onSave(e.target.value)}
-      onBlur={(e) => onSave(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          onSave(e.currentTarget.value);
-          e.currentTarget.blur();
-        }
-      }}
-    />
-  );
-}
+  const loadTasks = useCallback(async () => {
+    const data = await getAllSemesterTasks();
+    setTasks(data);
+    setLoading(false);
+  }, []);
 
-function InlineSelect({ value, options, onSave, autoFocus, ariaLabel }) {
-  return (
-    <select
-      autoFocus={autoFocus}
-      className="inline-select"
-      value={value}
-      aria-label={ariaLabel}
-      onChange={(e) => {
-        const v = e.target.value;
-        onSave(typeof options[0] === "number" ? Number(v) : v);
-        e.target.blur();
-      }}
-      onBlur={(e) => {
-        const v = e.target.value;
-        onSave(typeof options[0] === "number" ? Number(v) : v);
-      }}
-    >
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
-        </option>
-      ))}
-    </select>
-  );
-}
+  useEffect(() => { loadTasks(); }, [loadTasks]);
 
-/* ---- Page Component ---- */
-
-export default function SchedulingPage() {
-  const [taskRows, setTaskRows] = useState(initialTaskRows);
-  const [editingCell, setEditingCell] = useState(null);
-
-  /* Done tasks sink to the bottom */
-  const sortedRows = useMemo(
-    () =>
-      [...taskRows].sort((a, b) => {
-        const aDone = a.status === "Done" ? 1 : 0;
-        const bDone = b.status === "Done" ? 1 : 0;
-        return aDone - bDone;
-      }),
-    [taskRows]
-  );
-
-  function handleAddTask() {
-    const newId = Date.now();
-    setTaskRows((prev) => [
-      ...prev,
-      {
-        id: newId,
-        task: "",
-        dueDate: "",
-        urgency: "Low",
-        difficulty: 1,
-        status: "Scheduled",
-        isNew: true,
-      },
-    ]);
-    setEditingCell({ rowId: newId, field: "task" });
+  async function handleToggle(task) {
+    await toggleTaskCompletion(task);
+    loadTasks();
   }
 
-  function updateTaskRow(id, field, value) {
-    setTaskRows((prev) =>
-      prev.map((row) =>
-        row.id === id ? { ...row, [field]: value, isNew: false } : row
-      )
+  const activeCount = tasks.filter((t) => t.status !== "done").length;
+
+  if (loading) {
+    return (
+      <>
+        <header className="page-header">
+          <h1 className="page-title">Semester Schedule</h1>
+        </header>
+        <div className="database-view">
+          <p className="cell-placeholder" style={{ padding: 40 }}>Loading your semester...</p>
+        </div>
+      </>
     );
-    setEditingCell(null);
   }
-
-  function startEditing(rowId, field) {
-    setEditingCell({ rowId, field });
-  }
-
-  function isEditing(rowId, field) {
-    return editingCell?.rowId === rowId && editingCell?.field === field;
-  }
-
-  function renderCell(row, field) {
-    if (isEditing(row.id, field)) {
-      if (field === "task")
-        return (
-          <InlineText autoFocus value={row.task} ariaLabel="Task name" onSave={(v) => updateTaskRow(row.id, "task", v)} />
-        );
-      if (field === "dueDate")
-        return (
-          <InlineDate autoFocus value={row.dueDate} ariaLabel="Due date" onSave={(v) => updateTaskRow(row.id, "dueDate", v)} />
-        );
-      if (field === "urgency")
-        return (
-          <InlineSelect autoFocus value={row.urgency} ariaLabel="Urgency" options={["High", "Medium", "Low"]} onSave={(v) => updateTaskRow(row.id, "urgency", v)} />
-        );
-      if (field === "difficulty")
-        return (
-          <InlineSelect autoFocus value={row.difficulty} ariaLabel="Difficulty" options={[1, 2, 3, 4, 5]} onSave={(v) => updateTaskRow(row.id, "difficulty", v)} />
-        );
-      if (field === "status")
-        return (
-          <InlineSelect autoFocus value={row.status} ariaLabel="Status" options={["Not Started", "In Progress", "Scheduled", "Done"]} onSave={(v) => updateTaskRow(row.id, "status", v)} />
-        );
-    }
-
-    if (field === "task")
-      return row.task ? <span className="cell-task">{row.task}</span> : <span className="cell-placeholder">Untitled</span>;
-    if (field === "dueDate")
-      return row.dueDate ? <span className="cell-date">{formatDate(row.dueDate)}</span> : <span className="cell-placeholder">Empty</span>;
-    if (field === "urgency") return <UrgencyTag value={row.urgency} />;
-    if (field === "difficulty") return <DifficultyDots value={row.difficulty} />;
-    if (field === "status") return <StatusTag value={row.status} />;
-    return null;
-  }
-
-  const columns = [
-    { key: "task", label: "Task" },
-    { key: "dueDate", label: "Due date" },
-    { key: "urgency", label: "Urgency" },
-    { key: "difficulty", label: "Difficulty" },
-    { key: "status", label: "Status" },
-  ];
 
   return (
     <>
       <header className="page-header">
-        <h1 className="page-title">Scheduling</h1>
-        <button className="btn-primary" type="button" onClick={handleAddTask}>
+        <h1 className="page-title">Semester Schedule</h1>
+        <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>
           + New task
         </button>
       </header>
@@ -267,43 +221,72 @@ export default function SchedulingPage() {
       <div className="database-view">
         <div className="database-toolbar">
           <div className="database-toolbar__left">
-            <span className="database-toolbar__title">All tasks</span>
-            <span className="database-toolbar__count">· {taskRows.length}</span>
+            <span className="database-toolbar__title">All semester tasks</span>
+            <span className="database-toolbar__count">· {activeCount} active, {tasks.length} total</span>
           </div>
         </div>
 
-        <div className="db-table-wrap">
-          <table className="db-table">
-            <thead>
-              <tr>
-                {columns.map((col) => (
-                  <th key={col.key}>{col.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row) => (
-                <tr key={row.id} className={row.isNew ? "row-new" : ""}>
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className="cell-clickable"
-                      onClick={() => startEditing(row.id, col.key)}
-                    >
-                      {renderCell(row, col.key)}
-                    </td>
-                  ))}
+        {tasks.length === 0 ? (
+          <div className="upload-panel__section" style={{ marginTop: 12 }}>
+            <p className="upload-panel__empty">
+              No tasks yet. Upload a syllabus and approve extracted tasks, or add tasks manually.
+            </p>
+          </div>
+        ) : (
+          <div className="db-table-wrap">
+            <table className="db-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}></th>
+                  <th>Task</th>
+                  <th>Course</th>
+                  <th>Due</th>
+                  <th>Type</th>
+                  <th>Urgency</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tasks.map((task) => {
+                  const isDone = task.status === "done";
+                  const urgency = getTaskUrgency(task.dueDate, task.status);
 
-          <button className="db-add-row" type="button" onClick={handleAddTask}>
-            <span className="db-add-row__plus">+</span>
-            New
-          </button>
-        </div>
+                  return (
+                    <tr key={task.id} className={isDone ? "db-table-row--done" : ""}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          className="horizon-card__checkbox"
+                          checked={isDone}
+                          onChange={() => handleToggle(task)}
+                          style={{ margin: 0 }}
+                        />
+                      </td>
+                      <td>
+                        <span className="cell-task">{task.title}</span>
+                        {task.isOccurrence && <span className="tag tag--gray" style={{ marginLeft: 6, fontSize: 10 }}>recurring</span>}
+                      </td>
+                      <td>
+                        <span className="review-card__course">{task.course || "—"}</span>
+                      </td>
+                      <td className="cell-date">{formatDate(task.dueDate)}</td>
+                      <td><TypeTag type={task.type} /></td>
+                      <td><UrgencyTag urgency={urgency} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      <TaskModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={loadTasks}
+        courses={courses}
+        semester={semester}
+      />
     </>
   );
 }

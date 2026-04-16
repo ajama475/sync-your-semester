@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
+const STORAGE_KEY = "sys-semester-setup";
 
 const steps = [
   { key: "dates", label: "Dates" },
@@ -28,18 +30,19 @@ function CheckIcon() {
   );
 }
 
-function Field({ label, type = "text", value, placeholder, onChange, name }) {
+function Field({ label, type = "text", value, placeholder, onChange, name, error }) {
   return (
     <label className="field">
       <span className="field__label">{label}</span>
       <input
-        className="field__input"
+        className={`field__input${error ? " field__input--error" : ""}`}
         type={type}
         value={value}
         name={name}
         placeholder={placeholder}
         onChange={onChange}
       />
+      {error && <span className="field__error">{error}</span>}
     </label>
   );
 }
@@ -77,151 +80,141 @@ function CourseRow({ id, code, name, onChange, onRemove }) {
 export default function SemesterSetupClient() {
   const router = useRouter();
 
-  const [semesterDates, setSemesterDates] = useState({
-    startDate: "",
-    endDate: "",
-  });
-
+  const [semesterDates, setSemesterDates] = useState({ startDate: "", endDate: "" });
   const [courses, setCourses] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [attempted, setAttempted] = useState(false);
 
-  const hasDates = useMemo(
-    () => semesterDates.startDate !== "" && semesterDates.endDate !== "",
-    [semesterDates]
-  );
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.semesterDates) setSemesterDates(parsed.semesterDates);
+        if (Array.isArray(parsed?.courses) && parsed.courses.length > 0) setCourses(parsed.courses);
+      }
+    } catch {}
+  }, []);
 
-  const hasCourses = useMemo(
-    () => courses.some((c) => c.code.trim() !== "" || c.name.trim() !== ""),
-    [courses]
-  );
+  const hasDates = semesterDates.startDate !== "" && semesterDates.endDate !== "";
+  const hasValidCourses = courses.some((c) => c.code.trim() !== "" || c.name.trim() !== "");
 
   const activeStep = useMemo(() => {
     if (!hasDates) return 0;
-    if (!hasCourses) return 1;
+    if (!hasValidCourses) return 1;
     return 2;
-  }, [hasDates, hasCourses]);
+  }, [hasDates, hasValidCourses]);
+
+  function validate() {
+    const errors = {};
+    if (!semesterDates.startDate) errors.startDate = "Required";
+    if (!semesterDates.endDate) errors.endDate = "Required";
+    if (semesterDates.startDate && semesterDates.endDate && semesterDates.startDate >= semesterDates.endDate) {
+      errors.endDate = "Must be after start date";
+    }
+    if (!hasValidCourses) {
+      errors.courses = "Add at least one course with a code or name";
+    }
+    return errors;
+  }
 
   function handleDateChange(e) {
     const { name, value } = e.target;
     setSemesterDates((prev) => ({ ...prev, [name]: value }));
+    if (attempted) {
+      setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   }
 
   function handleCourseChange(id, field, value) {
-    setCourses((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
-    );
+    setCourses((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+    if (attempted) {
+      setValidationErrors((prev) => ({ ...prev, courses: undefined }));
+    }
   }
 
   function handleAddCourse() {
-    setCourses((prev) => [
-      ...prev,
-      { id: `course-${Date.now()}`, code: "", name: "" },
-    ]);
+    setCourses((prev) => [...prev, { id: `course-${Date.now()}`, code: "", name: "" }]);
   }
 
   function handleRemoveCourse(id) {
     setCourses((prev) => prev.filter((c) => c.id !== id));
   }
 
-  function handleSaveDraft() {
-    const payload = { semesterDates, courses };
-    localStorage.setItem("sys-semester-setup", JSON.stringify(payload));
-    alert("Draft saved locally.");
-  }
+  function handleContinue() {
+    setAttempted(true);
+    const errors = validate();
+    setValidationErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
-  function handleSync() {
     const payload = { semesterDates, courses };
-    localStorage.setItem("sys-semester-setup", JSON.stringify(payload));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     router.push("/dashboard");
   }
 
   return (
     <main className="setup-page">
       <div className="setup-container">
-        {/* Brand */}
         <div className="setup-brand">
-          <span className="setup-brand__icon">
-            <BrandIcon />
-          </span>
+          <span className="setup-brand__icon"><BrandIcon /></span>
           <span className="setup-brand__name">Sync Your Semester</span>
         </div>
 
-        {/* Progress steps */}
         <div className="setup-progress" aria-label="Setup progress">
           {steps.map((step, i) => (
             <div key={step.key} style={{ display: "contents" }}>
               <div className="setup-progress__step">
-                <span
-                  className={`setup-progress__dot${
-                    i < activeStep
-                      ? " setup-progress__dot--done"
-                      : i === activeStep
-                      ? " setup-progress__dot--active"
-                      : ""
-                  }`}
-                >
+                <span className={`setup-progress__dot${i < activeStep ? " setup-progress__dot--done" : i === activeStep ? " setup-progress__dot--active" : ""}`}>
                   {i < activeStep ? <CheckIcon /> : i + 1}
                 </span>
-                <span
-                  className={`setup-progress__label${
-                    i === activeStep ? " setup-progress__label--active" : ""
-                  }`}
-                >
+                <span className={`setup-progress__label${i === activeStep ? " setup-progress__label--active" : ""}`}>
                   {step.label}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <div
-                  className={`setup-progress__line${
-                    i < activeStep ? " setup-progress__line--done" : ""
-                  }`}
-                />
+                <div className={`setup-progress__line${i < activeStep ? " setup-progress__line--done" : ""}`} />
               )}
             </div>
           ))}
         </div>
 
-        {/* Heading */}
         <h1 className="setup-heading">Set up your semester</h1>
         <p className="setup-subheading">
-          Add your semester dates and courses. This helps us organize your
-          deadlines and show you what matters each week.
+          Your semester dates and courses anchor everything. We use them to organize
+          your deadlines and show you what matters each week.
         </p>
 
-        {/* Form */}
-        <form
-          className="setup-form"
-          onSubmit={(e) => e.preventDefault()}
-        >
-          {/* Date fields */}
+        <form className="setup-form" onSubmit={(e) => e.preventDefault()}>
           <div className="setup-form__row">
             <Field
-              label="Start date"
+              label="Semester start"
               type="date"
               name="startDate"
               value={semesterDates.startDate}
               onChange={handleDateChange}
+              error={attempted ? validationErrors.startDate : undefined}
             />
             <Field
-              label="End date"
+              label="Semester end"
               type="date"
               name="endDate"
               value={semesterDates.endDate}
               onChange={handleDateChange}
+              error={attempted ? validationErrors.endDate : undefined}
             />
           </div>
 
           <div className="setup-form__divider" />
 
-          {/* Courses */}
           <section className="setup-section" aria-labelledby="courses-heading">
             <div className="setup-section__header">
-              <h2 className="setup-section__title" id="courses-heading">
-                Courses
-              </h2>
-              <span className="setup-section__count">
-                {courses.length} added
-              </span>
+              <h2 className="setup-section__title" id="courses-heading">Courses</h2>
+              <span className="setup-section__count">{courses.length} added</span>
             </div>
+
+            {attempted && validationErrors.courses && (
+              <p className="field__error" style={{ marginBottom: 8 }}>{validationErrors.courses}</p>
+            )}
 
             <div className="course-list">
               {courses.map((course) => (
@@ -235,37 +228,21 @@ export default function SemesterSetupClient() {
                 />
               ))}
 
-              <button
-                className="btn-add"
-                type="button"
-                onClick={handleAddCourse}
-              >
+              <button className="btn-add" type="button" onClick={handleAddCourse}>
                 <span aria-hidden="true">+</span>
                 Add course
               </button>
             </div>
           </section>
 
-          {/* Actions */}
           <div className="setup-actions">
-            <button
-              className="btn-ghost"
-              type="button"
-              onClick={handleSaveDraft}
-            >
-              Save draft
-            </button>
-            <button
-              className="btn-primary"
-              type="button"
-              onClick={handleSync}
-            >
+            <div />
+            <button className="btn-primary" type="button" onClick={handleContinue}>
               Continue to dashboard
             </button>
           </div>
         </form>
 
-        {/* Footer */}
         <footer className="setup-footer">
           <span>Sync Your Semester — see what matters, before it's urgent.</span>
           <span>Local-first</span>
