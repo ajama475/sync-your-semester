@@ -15,7 +15,9 @@ import {
   getAllSemesterTasks,
   readSetup,
   formatISO,
+  createTask,
 } from "../../lib/tasks/taskHelpers";
+import Link from "next/link";
 
 /* ===========================================
    SEMESTER CONTEXT
@@ -444,6 +446,38 @@ export default function WhatMattersPage() {
         <header className="page-header"><h1 className="page-title">What Matters</h1></header>
         <div className="horizon-board">
           <p className="cell-placeholder" style={{ padding: 40 }}>Loading...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (tasks.length === 0) {
+    return (
+      <>
+        <header className="page-header page-header--planning">
+          <div>
+            <h1 className="page-title">What Matters</h1>
+            <p className="page-subtitle">Your planning surface for deadlines, start windows, and the next real move.</p>
+          </div>
+        </header>
+        <div className="what-matters-page">
+          <SemesterBar semester={semester} />
+          <div className="empty-state">
+            <div className="empty-state__icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+            <h2 className="empty-state__title">Welcome to Sync Your Semester</h2>
+            <p className="empty-state__copy">
+              Your workspace is currently empty. To get the most out of the platform, drop your course syllabus PDFs into the Syllabus Lab to automatically map out your deadlines and tasks.
+            </p>
+            <div className="empty-state__actions">
+              <Link href="/dashboard/sources" className="btn-primary">
+                Extract a Syllabus
+              </Link>
+            </div>
+          </div>
         </div>
       </>
     );

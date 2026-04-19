@@ -19,6 +19,9 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#12141a" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         {/* Inline script to set theme before paint — prevents flash */}
         <script
           dangerouslySetInnerHTML={{
@@ -38,6 +41,16 @@ export default function RootLayout({ children }) {
                   }
                 } catch(e) {}
               })();
+
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('SW registered: ', registration.scope);
+                  }, function(err) {
+                    console.log('SW registration failed: ', err);
+                  });
+                });
+              }
             `,
           }}
         />

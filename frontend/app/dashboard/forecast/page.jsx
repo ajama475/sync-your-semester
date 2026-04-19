@@ -264,7 +264,22 @@ export default function ForecastPage() {
         </div>
       </header>
 
-      <section className="forecast-topography" aria-label="Effort Topography chart">
+      {forecast.activeTasks.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state__icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+          </div>
+          <h2 className="empty-state__title">No data to forecast</h2>
+          <p className="empty-state__copy">
+            Your Workload Map will automatically generate once you add tasks or extract your syllabus.
+          </p>
+        </div>
+      ) : (
+        <>
+          <section className="forecast-topography" aria-label="Effort Topography chart">
         <div className="forecast-topography__header">
           <div>
             <h2>Effort Peaks</h2>
@@ -382,6 +397,8 @@ export default function ForecastPage() {
           </article>
         ))}
       </section>
+        </>
+      )}
     </div>
   );
 }
