@@ -60,7 +60,7 @@ function IconSparkle() {
 function StatusBadge({ status }) {
   const configs = {
     uploading: "Uploading",
-    parsing: "Analysing",
+    parsing: "Reading",
     ready: "Verified",
     attention: "Action required",
     error: "Error",
@@ -285,12 +285,12 @@ export default function PremiumSyllabusLab() {
       <header className="lab-header">
         <div>
           <h1 className="page-title lab-header__title">Syllabus Lab</h1>
-          <p className="page-subtitle lab-header__subtitle">High-fidelity conversion of academic materials.</p>
+          <p className="page-subtitle lab-header__subtitle">Upload syllabi, review extracted deadlines, and keep every file on this device.</p>
         </div>
         <div className="lab-stat-pill">
           <div className="lab-stat-pill__item">
             <div className="lab-stat-pill__value">{stats.total}</div>
-            <div className="lab-stat-pill__label">Materials</div>
+            <div className="lab-stat-pill__label">Syllabi</div>
           </div>
           <div className="lab-stat-pill__divider" />
           <div className="lab-stat-pill__item">
@@ -318,8 +318,8 @@ export default function PremiumSyllabusLab() {
       >
         <div className="lab-portal__icon"><IconPortal /></div>
         <div className="lab-portal__content">
-          <h2 className="lab-portal__title">Feed the Parser</h2>
-          <p className="lab-portal__hint">Drop syllabus PDFs here to extract deadlines locally. Files stay in this browser.</p>
+          <h2 className="lab-portal__title">Upload syllabus PDFs</h2>
+          <p className="lab-portal__hint">The local parser looks for dates and assignment language. You approve everything before it reaches Task Ledger.</p>
         </div>
         <div className="lab-portal__shimmer" />
         <input ref={fileInputRef} type="file" accept=".pdf" multiple style={{ display: "none" }} onChange={(e) => addFiles(e.target.files)} />
@@ -328,12 +328,12 @@ export default function PremiumSyllabusLab() {
       <section className="lab-inventory">
         <div className="lab-section-title">
           <IconSparkle />
-          <h3>Inventory</h3>
+          <h3>Syllabus Library</h3>
         </div>
 
         {files.length === 0 ? (
           <div className="lab-empty">
-            <p>No materials loaded in the lab environment.</p>
+            <p>No syllabi uploaded yet.</p>
           </div>
         ) : (
           <div className="lab-list">
@@ -385,7 +385,7 @@ export default function PremiumSyllabusLab() {
       </section>
 
       <footer className="lab-footer">
-        <p>&copy; Sync Your Semester &middot; Local-first Intelligence</p>
+        <p>&copy; Sync Your Semester &middot; Local-first planning</p>
         <div className="lab-capacity">
            <div className="lab-capacity__track">
               <div className="lab-capacity__fill" style={{ width: `${Math.min((files.length / MAX_DOCUMENTS) * 100, 100)}%` }} />
