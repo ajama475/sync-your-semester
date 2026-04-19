@@ -32,6 +32,8 @@ function getSemesterProgress(semester) {
 
   const start = new Date(`${semester.startDate}T00:00:00`);
   const end = new Date(`${semester.endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -45,6 +47,8 @@ function getSemesterProgress(semester) {
     Math.ceil(elapsedMs / (7 * 24 * 60 * 60 * 1000))
   ));
   const progressPct = Math.max(0, Math.min(100, (elapsedMs / totalMs) * 100));
+
+  if (Number.isNaN(currentWeek) || Number.isNaN(totalWeeks)) return null;
 
   return { currentWeek, totalWeeks, progressPct };
 }
