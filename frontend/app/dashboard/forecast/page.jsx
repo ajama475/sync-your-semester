@@ -241,10 +241,10 @@ export default function ForecastPage() {
     <div className="forecast-shell">
       <header className="forecast-hero">
         <div>
-          <div className="forecast-eyebrow">Semester Intelligence</div>
-          <h1 className="forecast-title">Effort Topography</h1>
+          <div className="forecast-eyebrow">Semester Forecast</div>
+          <h1 className="forecast-title">Workload Map</h1>
           <p className="forecast-subtitle">
-            A live map of deadline pressure and prep effort across your term.
+            A live map of deadline pressure and prep effort across your semester.
           </p>
         </div>
 
@@ -267,7 +267,7 @@ export default function ForecastPage() {
       <section className="forecast-topography" aria-label="Effort Topography chart">
         <div className="forecast-topography__header">
           <div>
-            <h2>Stress Peaks</h2>
+            <h2>Effort Peaks</h2>
             <p>
               Prep load, deadline pressure, and convergence.
             </p>

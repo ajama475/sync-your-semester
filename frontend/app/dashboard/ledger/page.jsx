@@ -5,9 +5,6 @@ import {
   getAllSemesterTasks,
   getParentTasks,
   getTaskUrgency,
-  getTaskBucket,
-  isPrepWindowOpen,
-  getNextAction,
   generateMilestones,
   getStartByDateFromMilestones,
   shouldRegenerateStartPlan,
@@ -326,23 +323,12 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
 }
 
 /* ===========================================
-   Summary Cards — Dashboard Overview
+   Page
    =========================================== */
-
-function SummaryCard({ label, value, detail, detailClass, accentValue }) {
-  return (
-    <div className="summary-card">
-      <div className="summary-card__label">{label}</div>
-      <div className={`summary-card__value${accentValue ? " summary-card__value--accent" : ""}`}>{value}</div>
-      {detail && <div className={`summary-card__detail${detailClass ? ` summary-card__detail--${detailClass}` : ""}`}>{detail}</div>}
-    </div>
-  );
-}
 
 export default function TaskLedgerPage() {
   const [tasks, setTasks] = useState([]);
   const [parentTasks, setParentTasks] = useState([]);
-  const [reviewCount, setReviewCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
@@ -351,23 +337,12 @@ export default function TaskLedgerPage() {
   const { courses, semester } = useMemo(() => readSetup(), []);
 
   const loadTasks = useCallback(async () => {
-    const [data, parents, records] = await Promise.all([
+    const [data, parents] = await Promise.all([
       getAllSemesterTasks(),
       getParentTasks(),
-      listSyllabusRecords(),
     ]);
     setTasks(data);
     setParentTasks(parents);
-
-    // Count unreviewed items
-    let pending = 0;
-    for (const record of records) {
-      for (const item of record.reviewItems || []) {
-        if (item.status === "pending") pending++;
-      }
-    }
-    setReviewCount(pending);
-
     setLoading(false);
   }, []);
 
@@ -478,33 +453,6 @@ export default function TaskLedgerPage() {
     setTaskToEdit(null);
   }
 
-  // Derive summary data
-  const summary = useMemo(() => {
-    const active = tasks.filter((t) => t.status !== "done" && !t.isMilestone);
-    const today = active.filter((t) => getTaskBucket(t.dueDate, t.status) === "Today").length;
-    const thisWeek = active.filter((t) => {
-      const bucket = getTaskBucket(t.dueDate, t.status);
-      return bucket === "Today" || bucket === "This Week" || bucket === "Overdue";
-    }).length;
-
-    const heavy = active.filter((t) => (t.difficulty ?? 0) >= 4).length;
-
-    // Upcoming exam
-    const examTypes = new Set(["exam", "midterm", "final", "quiz"]);
-    const upcomingExam = active.find((t) => examTypes.has(t.type));
-
-    // Start now count
-    let startNow = 0;
-    for (const task of parentTasks) {
-      if (task.status === "done" || !task.milestones) continue;
-      if (!isPrepWindowOpen(task)) continue;
-      const action = getNextAction(task);
-      if (action && action.active) startNow++;
-    }
-
-    return { today, thisWeek, upcomingExam, startNow, heavy };
-  }, [tasks, parentTasks]);
-
   const filteredTasks = useMemo(() => {
     if (filter === "syllabus") {
       return tasks.filter((t) => 
@@ -540,7 +488,10 @@ export default function TaskLedgerPage() {
   return (
     <>
       <header className="page-header">
-        <h1 className="page-title">Task Ledger</h1>
+        <div>
+          <h1 className="page-title">Task Ledger</h1>
+          <p className="page-subtitle">{activeCount} active task{activeCount !== 1 ? "s" : ""} across all sources</p>
+        </div>
         <button
           className="btn-primary"
           type="button"
@@ -553,45 +504,8 @@ export default function TaskLedgerPage() {
         </button>
       </header>
 
-      {/* Dashboard summary cards */}
-      <div className="dashboard-summary">
-        <SummaryCard
-          label="Today"
-          value={summary.today}
-          detail={summary.today === 0 ? "Nothing due today" : `${summary.today} task${summary.today !== 1 ? "s" : ""} due`}
-          detailClass={summary.today > 0 ? "urgent" : "safe"}
-        />
-        <SummaryCard
-          label="What Matters"
-          value={summary.thisWeek}
-          detail="Active this week"
-        />
-        <SummaryCard
-          label="Upcoming Exams"
-          value={summary.upcomingExam ? formatDate(summary.upcomingExam.dueDate) : "—"}
-          detail={summary.upcomingExam ? summary.upcomingExam.title : "No exams coming up"}
-          accentValue={!!summary.upcomingExam}
-        />
-        <SummaryCard
-          label="Start Now"
-          value={summary.startNow}
-          detail="Tasks with open prep windows"
-          detailClass={summary.startNow > 0 ? "urgent" : undefined}
-        />
-        <SummaryCard
-          label="Review Needed"
-          value={reviewCount}
-          detail={reviewCount === 0 ? "All caught up" : `${reviewCount} item${reviewCount !== 1 ? "s" : ""} awaiting review`}
-          detailClass={reviewCount > 0 ? "urgent" : "safe"}
-        />
-        <SummaryCard
-          label="Heavy"
-          value={summary.heavy}
-          detail="Tasks with difficulty ≥ 4"
-        />
-      </div>
-
       <div className="database-view">
+
         <div className="database-toolbar">
           <div className="database-toolbar__left">
             <div className="filter-tabs">
