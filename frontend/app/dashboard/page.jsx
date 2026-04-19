@@ -244,7 +244,7 @@ function StartNowCard({ task, nextAction, onSaveCommitment }) {
   );
 }
 
-function PlanningBrief({ startNowItems, heavyWeek, buckets, todayHeading }) {
+function PlanningBrief({ startNowItems, heavyWeek, buckets, todayHeading, completedThisWeek }) {
   const leadItem = startNowItems[0];
   const dueSoonCount = buckets.Today.length + buckets["This Week"].length;
   const nextMove = leadItem
@@ -272,11 +272,79 @@ function PlanningBrief({ startNowItems, heavyWeek, buckets, todayHeading }) {
           <span>Due soon</span>
         </div>
         <div>
-          <strong>{heavyWeek?.count || 0}</strong>
-          <span>Heavy items</span>
+          <strong>{completedThisWeek}</strong>
+          <span>Done this week</span>
         </div>
       </div>
     </section>
+  );
+}
+
+function QuickAddTask({ onCreated }) {
+  const [title, setTitle] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [type, setType] = useState("other");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!title.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    await createTask({
+      title: title.trim(),
+      dueDate: dueDate || null,
+      type,
+      difficulty: 0,
+    });
+    
+    setTitle("");
+    setDueDate("");
+    setType("other");
+    setIsSubmitting(false);
+    if (onCreated) onCreated();
+  }
+
+  return (
+    <form className="quick-add-task" onSubmit={handleSubmit} aria-label="Quick add task">
+      <div className="quick-add-task__input-wrapper">
+        <svg className="quick-add-task__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <input
+          type="text"
+          className="quick-add-task__input"
+          placeholder="Add a new task..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </div>
+      <input
+        type="date"
+        className="quick-add-task__date"
+        value={dueDate}
+        onChange={(e) => setDueDate(e.target.value)}
+        aria-label="Due date"
+      />
+      <select
+        className="quick-add-task__type"
+        value={type}
+        onChange={(e) => setType(e.target.value)}
+        aria-label="Task type"
+      >
+        <option value="other">General</option>
+        <option value="assignment">Assignment</option>
+        <option value="reading">Reading</option>
+        <option value="quiz">Quiz</option>
+        <option value="project">Project</option>
+        <option value="essay">Essay</option>
+        <option value="exam">Exam</option>
+      </select>
+      <button type="submit" className="quick-add-task__submit" disabled={!title.trim() || isSubmitting}>
+        {isSubmitting ? "Adding…" : "Add"}
+      </button>
+    </form>
   );
 }
 
@@ -408,6 +476,18 @@ export default function WhatMattersPage() {
     buckets[key] = sortByEffortPriority(buckets[key]);
   }
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
+  
+  let completedThisWeek = 0;
+  for (const task of tasks) {
+    if (task.status === "done" && task.completedAt && new Date(task.completedAt) >= startOfWeek) {
+      completedThisWeek++;
+    }
+  }
+
   return (
     <>
       <header className="page-header page-header--planning">
@@ -425,7 +505,10 @@ export default function WhatMattersPage() {
           heavyWeek={heavyWeek}
           buckets={buckets}
           todayHeading={todayHeading}
+          completedThisWeek={completedThisWeek}
         />
+
+        <QuickAddTask onCreated={loadTasks} />
 
         <div className="what-matters-top-grid">
           {startNowItems.length > 0 ? (

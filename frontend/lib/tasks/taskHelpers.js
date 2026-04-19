@@ -452,6 +452,7 @@ export async function getAllSemesterTasks() {
         startByDate: item.startByDate || null,
         milestonesCustomized: item.milestonesCustomized || false,
         startCommitment: item.startCommitment || null,
+        completedAt: item.completedAt || null,
       }))
   );
 
@@ -485,6 +486,7 @@ export async function getAllSemesterTasks() {
           dueDate: ms.date,
           difficulty: null,
           status: ms.done ? "done" : "active",
+          completedAt: ms.completedAt || null,
           course: task.course,
           source: "milestone",
           parentTaskId: task.id,
@@ -527,6 +529,7 @@ export async function getParentTasks() {
         startByDate: item.startByDate || null,
         milestonesCustomized: item.milestonesCustomized || false,
         startCommitment: item.startCommitment || null,
+        completedAt: item.completedAt || null,
       }))
   );
 
@@ -549,6 +552,8 @@ export async function getApprovedTasks() {
 }
 
 export async function toggleTaskCompletion(task) {
+  const nowStr = new Date().toISOString();
+
   // Milestone toggle
   if (task.isMilestone && task.parentTaskId) {
     const parentId = task.parentTaskId;
@@ -561,17 +566,25 @@ export async function toggleTaskCompletion(task) {
         ...record,
         reviewItems: (record.reviewItems || []).map((i) => {
           if (i.id !== itemId) return i;
-          const updatedMs = (i.milestones || []).map((m) =>
-            m.id === task.milestoneId ? { ...m, done: !m.done } : m
-          );
+          const updatedMs = (i.milestones || []).map((m) => {
+            if (m.id === task.milestoneId) {
+              const nextDone = !m.done;
+              return { ...m, done: nextDone, completedAt: nextDone ? nowStr : null };
+            }
+            return m;
+          });
           return { ...i, milestones: updatedMs };
         }),
       }));
     } else {
       await patchTask(parentId, (existing) => {
-        const updatedMs = (existing.milestones || []).map((m) =>
-          m.id === task.milestoneId ? { ...m, done: !m.done } : m
-        );
+        const updatedMs = (existing.milestones || []).map((m) => {
+          if (m.id === task.milestoneId) {
+            const nextDone = !m.done;
+            return { ...m, done: nextDone, completedAt: nextDone ? nowStr : null };
+          }
+          return m;
+        });
         return { ...existing, milestones: updatedMs };
       });
     }
@@ -583,7 +596,7 @@ export async function toggleTaskCompletion(task) {
     await patchSyllabusRecord(task.recordId, (record) => ({
       ...record,
       reviewItems: (record.reviewItems || []).map((i) =>
-        i.id === task.taskId ? { ...i, status: nextStatus } : i
+        i.id === task.taskId ? { ...i, status: nextStatus, completedAt: nextStatus === "done" ? nowStr : null } : i
       ),
     }));
     return nextStatus === "done" ? "done" : "active";
@@ -604,9 +617,10 @@ export async function toggleTaskCompletion(task) {
   }
 
   const nextStatus = task.status === "done" ? "active" : "done";
-  await patchTask(task.id, (existing) => ({ ...existing, status: nextStatus }));
+  await patchTask(task.id, (existing) => ({ ...existing, status: nextStatus, completedAt: nextStatus === "done" ? nowStr : null }));
   return nextStatus;
 }
+
 
 /**
  * Persists a manually created task and attaches an auto-generated Start Plan

@@ -448,11 +448,6 @@ export default function TaskLedgerPage() {
     setModalOpen(true);
   }
 
-  function handleCloseModal() {
-    setModalOpen(false);
-    setTaskToEdit(null);
-  }
-
   const filteredTasks = useMemo(() => {
     if (filter === "syllabus") {
       return tasks.filter((t) => 
@@ -470,7 +465,90 @@ export default function TaskLedgerPage() {
     return tasks;
   }, [tasks, filter]);
 
-  const activeCount = tasks.filter((t) => t.status !== "done").length;
+  const activeCount = filteredTasks.filter((t) => t.status !== "done").length;
+
+  const renderRow = (task) => {
+    const isDone = task.status === "done";
+    const urgency = getTaskUrgency(task.dueDate, task.status);
+    const isMilestone = task.isMilestone;
+
+    return (
+      <tr
+        key={task.id}
+        className={`db-table-row--clickable${isDone ? " db-table-row--done" : ""}${isMilestone ? " db-table-row--milestone" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => handleOpenTask(task)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleOpenTask(task);
+          }
+        }}
+      >
+        <td
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="horizon-card__checkbox"
+            checked={isDone}
+            onChange={(event) => {
+              event.stopPropagation();
+              handleToggle(task);
+            }}
+            style={{ margin: 0 }}
+          />
+        </td>
+        <td>
+          <div className="cell-task-wrapper">
+            <span className={`cell-task${isMilestone ? " cell-task--milestone" : ""}`} title={task.title}>
+              {task.title}
+            </span>
+            {task.isOccurrence && <span className="tag tag--gray" style={{ fontSize: 10 }}>recurring</span>}
+            {!groupByCourse && task.course && task.course !== "—" && !isMilestone && (
+              <span className="cell-course-badge">{task.course}</span>
+            )}
+            {isMilestone && task.milestoneWhy && (
+              <span className="cell-why-hint">{task.milestoneWhy}</span>
+            )}
+          </div>
+        </td>
+        <td className="cell-date">{formatDate(task.dueDate)}</td>
+        <td className="cell-date cell-date--start">{!isMilestone && task.startByDate ? formatDate(task.startByDate) : ""}</td>
+        <td>{!isMilestone && <TypeTag type={task.type} />}</td>
+        <td><DifficultyDots value={task.difficulty} /></td>
+        <td><UrgencyTag urgency={urgency} /></td>
+      </tr>
+    );
+  };
+
+  const renderTableBody = () => {
+    if (!groupByCourse) {
+      return filteredTasks.map(renderRow);
+    }
+    
+    const groups = {};
+    for (const task of filteredTasks) {
+      const course = (!task.course || task.course === "—") ? "Other Tasks" : task.course;
+      if (!groups[course]) groups[course] = [];
+      groups[course].push(task);
+    }
+    
+    const courseNames = Object.keys(groups).sort((a, b) => {
+      if (a === "Other Tasks") return 1;
+      if (b === "Other Tasks") return -1;
+      return a.localeCompare(b);
+    });
+
+    return courseNames.flatMap((course) => [
+      <tr key={`group-${course}`} className="db-table-group-header">
+        <td colSpan="7">{course}</td>
+      </tr>,
+      ...groups[course].map(renderRow)
+    ]);
+  };
 
   if (loading) {
     return (
@@ -496,7 +574,7 @@ export default function TaskLedgerPage() {
           className="btn-primary"
           type="button"
           onClick={() => {
-            setTaskToEdit(null);
+            setSelectedTask(null);
             setModalOpen(true);
           }}
         >
@@ -528,7 +606,17 @@ export default function TaskLedgerPage() {
                 Personal
               </button>
             </div>
-            <span className="database-toolbar__count">· {filteredTasks.filter(t => t.status !== 'done').length} active</span>
+            <span className="database-toolbar__count">· {activeCount} active</span>
+          </div>
+          <div className="database-toolbar__right">
+            <label className="group-by-toggle">
+              <input
+                type="checkbox"
+                checked={groupByCourse}
+                onChange={(e) => setGroupByCourse(e.target.checked)}
+              />
+              <span>Group by course</span>
+            </label>
           </div>
         </div>
 
@@ -553,62 +641,7 @@ export default function TaskLedgerPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.map((task) => {
-                  const isDone = task.status === "done";
-                  const urgency = getTaskUrgency(task.dueDate, task.status);
-                  const isMilestone = task.isMilestone;
-
-                  return (
-                    <tr
-                      key={task.id}
-                      className={`db-table-row--clickable${isDone ? " db-table-row--done" : ""}${isMilestone ? " db-table-row--milestone" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleOpenTask(task)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          handleOpenTask(task);
-                        }
-                      }}
-                    >
-                      <td
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          className="horizon-card__checkbox"
-                          checked={isDone}
-                          onChange={(event) => {
-                            event.stopPropagation();
-                            handleToggle(task);
-                          }}
-                          style={{ margin: 0 }}
-                        />
-                      </td>
-                      <td>
-                        <div className="cell-task-wrapper">
-                          <span className={`cell-task${isMilestone ? " cell-task--milestone" : ""}`} title={task.title}>
-                            {task.title}
-                          </span>
-                          {task.isOccurrence && <span className="tag tag--gray" style={{ fontSize: 10 }}>recurring</span>}
-                          {task.course && task.course !== "—" && !isMilestone && (
-                            <span className="cell-course-badge">{task.course}</span>
-                          )}
-                          {isMilestone && task.milestoneWhy && (
-                            <span className="cell-why-hint">{task.milestoneWhy}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="cell-date">{formatDate(task.dueDate)}</td>
-                      <td className="cell-date cell-date--start">{!isMilestone && task.startByDate ? formatDate(task.startByDate) : ""}</td>
-                      <td>{!isMilestone && <TypeTag type={task.type} />}</td>
-                      <td><DifficultyDots value={task.difficulty} /></td>
-                      <td><UrgencyTag urgency={urgency} /></td>
-                    </tr>
-                  );
-                })}
+                {renderTableBody()}
               </tbody>
             </table>
           </div>
@@ -617,13 +650,13 @@ export default function TaskLedgerPage() {
 
       <TaskModal
         open={modalOpen}
-        onClose={handleCloseModal}
+        onClose={() => setModalOpen(false)}
         onCreated={loadTasks}
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
         courses={courses}
         semester={semester}
-        taskToEdit={taskToEdit}
+        taskToEdit={selectedTask}
       />
     </>
   );
