@@ -333,6 +333,7 @@ export default function TaskLedgerPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [filter, setFilter] = useState("all"); // 'all' | 'syllabus' | 'personal'
+  const [groupByCourse, setGroupByCourse] = useState(false);
 
   const { courses, semester } = useMemo(() => readSetup(), []);
 
