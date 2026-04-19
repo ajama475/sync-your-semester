@@ -9,9 +9,13 @@ import {
   isPrepWindowOpen,
   getNextAction,
   generateMilestones,
+  getStartByDateFromMilestones,
+  shouldRegenerateStartPlan,
   toggleTaskCompletion,
   createTask,
   updateTask,
+  updateMilestone,
+  deleteMilestone,
   removeTask,
   readSetup,
 } from "../../lib/tasks/taskHelpers";
@@ -68,21 +72,24 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
   const [loopStart, setLoopStart] = useState("");
   const [loopEnd, setLoopEnd] = useState("");
   const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState("active");
   const [deleteArmed, setDeleteArmed] = useState(false);
 
   const isEditing = !!taskToEdit;
+  const isMilestoneEdit = !!taskToEdit?.isMilestone;
 
   function reset() {
     setTitle(""); setDueDate(""); setCourseId(""); setType("other");
     setDifficulty(0); setIsLoop(false); setLoopDays([]);
     setLoopStart(semester?.startDate || ""); setLoopEnd(semester?.endDate || "");
     setNotes("");
+    setStatus("active");
     setDeleteArmed(false);
   }
 
   useEffect(() => {
     if (taskToEdit) {
-      setTitle(taskToEdit.title || "");
+      setTitle(taskToEdit.isMilestone ? (taskToEdit.milestoneLabel || taskToEdit.title?.replace(/^↳\s*/, "") || "") : (taskToEdit.title || ""));
       setDueDate(taskToEdit.dueDate || "");
       setCourseId(taskToEdit.courseId || "");
       setType(taskToEdit.type || "other");
@@ -91,7 +98,8 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
       setLoopDays(taskToEdit.recurrence?.days || []);
       setLoopStart(taskToEdit.recurrence?.startDate || semester?.startDate || "");
       setLoopEnd(taskToEdit.recurrence?.endDate || semester?.endDate || "");
-      setNotes(taskToEdit.notes || "");
+      setNotes(taskToEdit.isMilestone ? (taskToEdit.milestoneWhy || "") : (taskToEdit.notes || ""));
+      setStatus(taskToEdit.status === "done" ? "done" : "active");
       setDeleteArmed(false);
     } else {
       reset();
@@ -104,6 +112,19 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
 
   async function handleSubmit() {
     if (!title.trim()) return;
+    if (isMilestoneEdit) {
+      await onSave(taskToEdit, {
+        label: title.trim(),
+        date: dueDate || null,
+        why: notes.trim(),
+        status,
+      });
+      reset();
+      onCreated();
+      onClose();
+      return;
+    }
+
     const courseEntry = courses.find((c) => c.id === courseId);
     const courseLabel = courseEntry ? (courseEntry.code || courseEntry.name) : "—";
 
@@ -115,6 +136,7 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
       type,
       difficulty: difficulty || null,
       notes: notes.trim(),
+      status,
       recurrence: isLoop && loopDays.length > 0 ? {
         days: loopDays,
         startDate: loopStart,
@@ -150,17 +172,40 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
-          <h2 className="modal__title">{isEditing ? "Edit task" : "New task"}</h2>
+          <h2 className="modal__title">{isMilestoneEdit ? "Edit prep step" : isEditing ? "Edit task" : "New task"}</h2>
           <button className="modal__close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="modal__body">
+          {isMilestoneEdit && (
+            <div className="modal-context">
+              <span className="modal-context__label">Parent task</span>
+              <span className="modal-context__value">{taskToEdit.parentTitle || "Major task"}</span>
+            </div>
+          )}
+
           <label className="field">
-            <span className="field__label">Title</span>
+            <span className="field__label">{isMilestoneEdit ? "Prep step" : "Title"}</span>
             <input className="field__input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Assignment 2, Gym, Office Hours" autoFocus />
           </label>
 
-          <div className="setup-form__row">
+          {isMilestoneEdit ? (
+            <div className="setup-form__row">
+              <label className="field">
+                <span className="field__label">Date</span>
+                <input className="field__input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="field__label">Status</span>
+                <select className="field__input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="active">Active</option>
+                  <option value="done">Done</option>
+                </select>
+              </label>
+            </div>
+          ) : (
+            <>
+              <div className="setup-form__row">
             {courses.length > 0 && (
               <label className="field">
                 <span className="field__label">Course (optional)</span>
@@ -185,7 +230,7 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
                 <option value="reading">Reading</option>
               </select>
             </label>
-          </div>
+              </div>
 
           <label className="field">
             <span className="field__label">Difficulty</span>
@@ -201,6 +246,16 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
               ))}
             </div>
           </label>
+
+          {isEditing && (
+            <label className="field">
+              <span className="field__label">Status</span>
+              <select className="field__input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="active">Active</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+          )}
 
           <label className="field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={isLoop} onChange={(e) => setIsLoop(e.target.checked)} className="horizon-card__checkbox" />
@@ -241,10 +296,12 @@ function TaskModal({ open, onClose, onCreated, onSave, onDelete, courses, semest
               <input className="field__input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
           )}
+            </>
+          )}
 
           <label className="field">
-            <span className="field__label">Notes (optional)</span>
-            <textarea className="field__input field__textarea" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Any extra context..." />
+            <span className="field__label">{isMilestoneEdit ? "Why now (optional)" : "Notes (optional)"}</span>
+            <textarea className="field__input field__textarea" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={isMilestoneEdit ? "Why this prep step matters..." : "Any extra context..."} />
           </label>
         </div>
 
@@ -322,29 +379,58 @@ export default function TaskLedgerPage() {
   }
 
   async function handleSaveTask(task, taskData) {
-    if (task.source === "syllabus" && task.recordId && task.taskId) {
-      const { milestones, startByDate } = generateMilestones({
-        type: taskData.type,
-        dueDate: taskData.dueDate,
-        difficulty: taskData.difficulty ?? null,
-      }, semester?.startDate);
+    if (task.isMilestone && task.parentTaskId && task.milestoneId) {
+      await updateMilestone(task.parentTaskId, task.milestoneId, taskData);
+      return;
+    }
 
+    if (task.source === "syllabus" && task.recordId && task.taskId) {
       await patchSyllabusRecord(task.recordId, (record) => ({
         ...record,
-        reviewItems: (record.reviewItems || []).map((item) =>
-          item.id === task.taskId
-            ? {
-                ...item,
-                title: taskData.title,
-                type: taskData.type || "other",
-                dueDateRaw: taskData.dueDate,
-                difficulty: taskData.difficulty ?? null,
-                notes: taskData.notes || item.notes || "",
-                milestones: milestones.length > 0 ? milestones : null,
-                startByDate,
-              }
-            : item
-        ),
+        reviewItems: (record.reviewItems || []).map((item) => {
+          if (item.id !== task.taskId) return item;
+
+          const nextType = taskData.type || "other";
+          const nextDueDate = taskData.dueDate;
+          const nextDifficulty = taskData.difficulty ?? null;
+          const shouldRefreshPlan =
+            nextType !== item.type ||
+            nextDueDate !== item.dueDateRaw ||
+            nextDifficulty !== (item.difficulty ?? null);
+
+          let milestones = item.milestones || null;
+          let startByDate = item.startByDate || null;
+          let milestonesCustomized = item.milestonesCustomized || false;
+
+          if (shouldRefreshPlan) {
+            if (shouldRegenerateStartPlan(item)) {
+              const regen = generateMilestones({
+                type: nextType,
+                dueDate: nextDueDate,
+                difficulty: nextDifficulty,
+              }, semester?.startDate);
+              milestones = regen.milestones.length > 0 ? regen.milestones : null;
+              startByDate = regen.startByDate;
+              milestonesCustomized = false;
+            } else {
+              startByDate = getStartByDateFromMilestones(milestones);
+              milestonesCustomized = true;
+            }
+          }
+
+          return {
+            ...item,
+            title: taskData.title,
+            type: nextType,
+            dueDateRaw: nextDueDate,
+            difficulty: nextDifficulty,
+            notes: taskData.notes ?? item.notes ?? "",
+            status: taskData.status === "done" ? "done" : "approved",
+            milestones,
+            startByDate,
+            milestonesCustomized,
+          };
+        }),
       }));
       return;
     }
@@ -353,6 +439,11 @@ export default function TaskLedgerPage() {
   }
 
   async function handleDeleteTask(task) {
+    if (task.isMilestone && task.parentTaskId && task.milestoneId) {
+      await deleteMilestone(task.parentTaskId, task.milestoneId);
+      return;
+    }
+
     if (task.source === "syllabus" && task.recordId && task.taskId) {
       await patchSyllabusRecord(task.recordId, (record) => ({
         ...record,
@@ -367,8 +458,8 @@ export default function TaskLedgerPage() {
   }
 
   function resolveEditableTask(task) {
-    if (task.isMilestone && task.parentTaskId) {
-      return parentTasks.find((parent) => parent.id === task.parentTaskId) || task;
+    if (task.isMilestone) {
+      return task;
     }
     if (task.isOccurrence && task.parentId) {
       return parentTasks.find((parent) => parent.id === task.parentId) || task;
