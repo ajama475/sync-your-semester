@@ -41,7 +41,7 @@ if (typeof window !== "undefined") {
  * @property {string} rawText
  * @property {string} isoDate
  * @property {number} index
- * @property {"month_first" | "day_first" | "numeric"} kind
+ * @property {"month_first" | "day_first" | "numeric" | "iso_numeric"} kind
  */
 
 /**
@@ -393,6 +393,32 @@ function resolveYear(month, day, explicitYear, semester) {
 }
 
 /**
+ * Resolves slash/dash numeric dates without assuming every syllabus uses the
+ * same locale. We prefer month/day when both readings are valid, but semester
+ * bounds can flip ambiguous dates when only the day/month interpretation lands
+ * inside the student's term.
+ */
+function resolveNumericDate(first, second, rawYear, semester) {
+  const explicitYear = parseExplicitYear(rawYear);
+  const candidates = [];
+
+  function addCandidate(month, day, order) {
+    if (month < 1 || month > 12 || day < 1 || day > 31) return;
+    const year = resolveYear(month, day, explicitYear, semester);
+    const isoDate = safeISODate(year, month, day);
+    if (!isoDate) return;
+    candidates.push({ isoDate, order, semesterFit: isWithinSemester(isoDate, semester) });
+  }
+
+  addCandidate(first, second, "month_first");
+  addCandidate(second, first, "day_first");
+
+  if (candidates.length === 0) return null;
+  const insideSemester = candidates.find((candidate) => candidate.semesterFit === true);
+  return insideSemester?.isoDate || candidates[0].isoDate;
+}
+
+/**
  * @param {AcademicTaskType} type
  */
 function inferDifficulty(type) {
@@ -549,6 +575,7 @@ function extractDateMatches(text, semester) {
     `\\b(?:${WEEKDAY_PATTERN}\\s*,?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*[-–]\\s*(\\d{1,2})(?:st|nd|rd|th)?)?\\s+(${MONTH_NAME_PATTERN})\\.?\\s*(\\d{2,4})?\\b`,
     "gi"
   );
+  const isoNumeric = /\b((?:19|20)\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/g;
   const numeric = /\b(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?\b/g;
 
   let match;
@@ -575,12 +602,20 @@ function extractDateMatches(text, semester) {
     addDateMatch(match[0], isoDate, match.index, "day_first");
   }
 
-  while ((match = numeric.exec(text)) !== null) {
-    const month = Number(match[1]);
-    const day = Number(match[2]);
-    if (month > 12 || day > 31) continue;
-    const year = resolveYear(month, day, parseExplicitYear(match[3]), semester);
+  while ((match = isoNumeric.exec(text)) !== null) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
     const isoDate = safeISODate(year, month, day);
+    if (!isoDate) continue;
+
+    addDateMatch(match[0], isoDate, match.index, "iso_numeric");
+  }
+
+  while ((match = numeric.exec(text)) !== null) {
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    const isoDate = resolveNumericDate(first, second, match[3], semester);
     if (!isoDate) continue;
 
     addDateMatch(match[0], isoDate, match.index, "numeric");
