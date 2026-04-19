@@ -100,10 +100,40 @@ function confidenceClass(score) {
   return "tag tag--orange";
 }
 
-function confidenceIcon(score) {
-  if (score >= 90) return "✓";
-  if (score >= 75) return "⚠";
-  return "!";
+function confidenceDetails(score = 0, extraction = "") {
+  if (extraction === "manual") {
+    return {
+      label: "Manual",
+      tone: "high",
+      note: "Created from a user-selected PDF region.",
+    };
+  }
+
+  if (score >= 90) {
+    return {
+      label: "High",
+      tone: "high",
+      note: "Strong date, task, and source signals.",
+    };
+  }
+
+  if (score >= 75) {
+    return {
+      label: "Medium",
+      tone: "medium",
+      note: "Good candidate, but worth checking against the PDF.",
+    };
+  }
+
+  return {
+    label: "Needs review",
+    tone: "low",
+    note: "Approve only after the highlighted source matches the task.",
+  };
+}
+
+function confidenceLabel(score, extraction) {
+  return confidenceDetails(score, extraction).label;
 }
 
 function formatDueDate(dateString) {
@@ -133,6 +163,63 @@ function itemStatusText(status) {
   if (status === "approved") return "Approved";
   if (status === "rejected") return "Rejected";
   return "Automatic extraction";
+}
+
+function sectionHintLabel(sectionHint) {
+  const labels = {
+    important_dates: "Important dates",
+    schedule: "Schedule",
+    assignments: "Assignments",
+    assessment: "Assessment",
+    policy: "Policy",
+    neutral: "General text",
+  };
+
+  return labels[sectionHint] || "General text";
+}
+
+function uniqueCompactList(values, limit = 4) {
+  const unique = Array.from(new Set(values.filter(Boolean)));
+  if (unique.length <= limit) return unique;
+  return [...unique.slice(0, limit), `+${unique.length - limit} more`];
+}
+
+function warningsForItem(record, item) {
+  const warnings = record?.parseResult?.warnings || [];
+  const sourcePage = item?.sourcePage || item?.pageNumber;
+  return warnings.filter((warning) => !warning.pageNumber || warning.pageNumber === sourcePage);
+}
+
+/**
+ * Produces short, student-facing verification guidance from parser metadata.
+ * The goal is trust calibration: tell the student what deserves attention
+ * without forcing them to understand the parser's scoring internals.
+ */
+function buildVerificationAdvice(item, record) {
+  if (!item) return "";
+
+  const warnings = warningsForItem(record, item);
+  const negativeReasons = (item.reasons || []).filter((reason) => reason.impact === "negative");
+  const dateReason = negativeReasons.find((reason) => reason.code === "multiple_dates" || reason.code === "outside_semester");
+  const titleReason = negativeReasons.find((reason) => reason.code === "weak_title" || reason.code === "low_signal_title");
+
+  if (warnings.length > 0) {
+    return "This PDF page had extraction warnings. Check the highlighted source before approving.";
+  }
+
+  if (dateReason) {
+    return "Check that the highlighted date is the actual due date, not a policy or schedule reference.";
+  }
+
+  if (titleReason) {
+    return "Check the title. The parser may have captured too little context from the source line.";
+  }
+
+  if ((item.confidence || 0) < 75) {
+    return "Compare the title and due date with the PDF before sending this to Task Ledger.";
+  }
+
+  return "Confirm the highlighted source matches the title and due date, then approve.";
 }
 
 function updateNestedItem(items, itemId, updater) {
@@ -230,6 +317,114 @@ function ConflictWarnings({ groups, onSelect }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function ReviewTrustSummary({ items, records }) {
+  const pending = items.filter((item) => item.status === "pending");
+  const averageConfidence = pending.length === 0
+    ? 0
+    : Math.round(pending.reduce((total, item) => total + (Number(item.confidence) || 0), 0) / pending.length);
+  const needsReview = pending.filter((item) => (Number(item.confidence) || 0) < 75).length;
+  const warningCount = records.reduce((total, record) => total + (record.parseResult?.warnings?.length || 0), 0);
+
+  return (
+    <section className="review-trust-summary" aria-label="Parser review summary">
+      <div className="review-trust-summary__item">
+        <span>Average confidence</span>
+        <strong>{averageConfidence || "--"}%</strong>
+      </div>
+      <div className="review-trust-summary__item">
+        <span>Needs care</span>
+        <strong>{needsReview}</strong>
+      </div>
+      <div className="review-trust-summary__item">
+        <span>PDF warnings</span>
+        <strong>{warningCount}</strong>
+      </div>
+    </section>
+  );
+}
+
+function EvidencePanel({ item, record }) {
+  const details = confidenceDetails(item.confidence || 0, item.extraction);
+  const reasons = item.reasons || [];
+  const positiveReasons = reasons.filter((reason) => reason.impact === "positive");
+  const cautionReasons = reasons.filter((reason) => reason.impact === "negative");
+  const neutralReasons = reasons.filter((reason) => reason.impact === "neutral");
+  const warningMessages = warningsForItem(record, item).map((warning) => warning.message);
+  const matchedCues = uniqueCompactList([item.matchedDateText, ...(item.matchedKeywords || [])]);
+  const advice = buildVerificationAdvice(item, record);
+
+  return (
+    <div className="review-evidence" aria-label="Parser evidence">
+      <div className={`review-evidence__confidence review-evidence__confidence--${details.tone}`}>
+        <div>
+          <span className="review-evidence__eyebrow">Parser confidence</span>
+          <strong>{details.label}</strong>
+          <p>{details.note}</p>
+        </div>
+        <div className="review-evidence__score">
+          <span>{item.confidence || 0}%</span>
+          <div className="review-evidence__meter" aria-hidden="true">
+            <div style={{ width: `${Math.max(0, Math.min(item.confidence || 0, 100))}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="review-evidence__grid">
+        <div>
+          <span>Matched date</span>
+          <strong>{item.matchedDateText || "Not stored"}</strong>
+        </div>
+        <div>
+          <span>Source section</span>
+          <strong>{sectionHintLabel(item.sectionHint)}</strong>
+        </div>
+        <div>
+          <span>Page</span>
+          <strong>{item.sourcePage || item.pageNumber || "?"}</strong>
+        </div>
+      </div>
+
+      {matchedCues.length > 0 && (
+        <div className="review-evidence__chips" aria-label="Matched parser cues">
+          {matchedCues.map((cue) => (
+            <span key={`${item.clientId}-${cue}`}>{cue}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="review-evidence__advice">
+        <span>What to verify</span>
+        <p>{advice}</p>
+      </div>
+
+      {(positiveReasons.length > 0 || cautionReasons.length > 0 || neutralReasons.length > 0 || warningMessages.length > 0) && (
+        <div className="review-evidence__reasons">
+          {warningMessages.map((message) => (
+            <span key={`${item.clientId}-${message}`} className="review-evidence__reason review-evidence__reason--warning">
+              {message}
+            </span>
+          ))}
+          {cautionReasons.slice(0, 3).map((reason) => (
+            <span key={`${item.clientId}-${reason.code}`} className="review-evidence__reason review-evidence__reason--negative">
+              {reason.detail}
+            </span>
+          ))}
+          {positiveReasons.slice(0, 4).map((reason) => (
+            <span key={`${item.clientId}-${reason.code}`} className="review-evidence__reason review-evidence__reason--positive">
+              {reason.detail}
+            </span>
+          ))}
+          {neutralReasons.slice(0, 1).map((reason) => (
+            <span key={`${item.clientId}-${reason.code}`} className="review-evidence__reason review-evidence__reason--neutral">
+              {reason.detail}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -555,7 +750,7 @@ function PdfViewer({ record, selectedItem, currentPage, zoom, onCreateSnipTask }
                   key={`${line.pageNumber}-${line.indexStart}`}
                   className={`review-pdf__source-line${isSelectedLine ? " review-pdf__source-line--selected" : ""}`}
                 >
-                  {line.text}
+                  <SnippetText text={line.text} terms={isSelectedLine ? selectedItem.highlightedTerms || [] : []} />
                 </div>
               );
             })}
@@ -887,6 +1082,8 @@ function ReviewPageContent() {
           </div>
         </div>
 
+        <ReviewTrustSummary items={items} records={records} />
+
         <ConflictWarnings groups={conflictGroups} onSelect={setSelectedId} />
 
         <div className="review-queue__list">
@@ -915,7 +1112,7 @@ function ReviewPageContent() {
                   <div className="review-card__top">
                     <span className="review-card__course">{item.course}</span>
                     <span className={confidenceClass(item.confidence)}>
-                      {item.confidence}% {confidenceIcon(item.confidence)}
+                      {confidenceLabel(item.confidence, item.extraction)} · {item.confidence}%
                     </span>
                   </div>
 
@@ -988,70 +1185,12 @@ function ReviewPageContent() {
                         </p>
                       </div>
 
-                      {item.reasons?.length > 0 && (
-                        <div className="review-card__reason-list">
-                          {item.reasons.slice(0, 3).map((reason) => (
-                            <span
-                              key={`${item.clientId}-${reason.code}`}
-                              className={`review-card__reason review-card__reason--${reason.impact}`}
-                            >
-                              {reason.detail}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <EvidencePanel item={item} record={selectedRecord} />
 
                       <div className="review-card__extraction">
                         {itemStatusText(item.status)} · page {item.sourcePage || item.pageNumber || "?"}
                       </div>
 
-                      <div className="review-card__actions">
-                        <button
-                          className="review-action review-action--reject"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleReject(item);
-                          }}
-                        >
-                          <IconX /> Reject
-                        </button>
-
-                        {isEditing ? (
-                          <button
-                            className="review-action review-action--edit"
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleSaveEdit(item);
-                            }}
-                          >
-                            <IconCheck /> Save
-                          </button>
-                        ) : (
-                          <button
-                            className="review-action review-action--edit"
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleStartEdit(item);
-                            }}
-                          >
-                            <IconEdit /> Edit
-                          </button>
-                        )}
-
-                        <button
-                          className="review-action review-action--approve"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleApprove(item);
-                          }}
-                        >
-                          <IconCheck /> Approve
-                        </button>
-                      </div>
                     </>
                   )}
 
@@ -1068,6 +1207,44 @@ function ReviewPageContent() {
 
         {pendingItems.length > 0 && (
           <div className="review-queue__footer">
+            {selected && (
+              <div className="review-queue__actionbar" aria-label="Selected review actions">
+                <button
+                  className="review-action review-action--reject"
+                  type="button"
+                  onClick={() => handleReject(selected)}
+                >
+                  <IconX /> Reject
+                </button>
+
+                {editingId === selected.clientId ? (
+                  <button
+                    className="review-action review-action--edit"
+                    type="button"
+                    onClick={() => handleSaveEdit(selected)}
+                  >
+                    <IconCheck /> Save
+                  </button>
+                ) : (
+                  <button
+                    className="review-action review-action--edit"
+                    type="button"
+                    onClick={() => handleStartEdit(selected)}
+                  >
+                    <IconEdit /> Edit
+                  </button>
+                )}
+
+                <button
+                  className="review-action review-action--approve"
+                  type="button"
+                  onClick={() => handleApprove(selected)}
+                >
+                  <IconCheck /> Approve
+                </button>
+              </div>
+            )}
+
             <div className="review-queue__progress">
               <div className="review-queue__progress-bar">
                 <div
