@@ -206,7 +206,7 @@ a {
   width: 26px;
   height: 26px;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -601,7 +601,7 @@ a {
   width: 26px;
   height: 26px;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2865,9 +2865,15 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   color: var(--accent);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .empty-state__title {
