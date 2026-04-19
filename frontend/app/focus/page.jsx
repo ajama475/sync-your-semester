@@ -1,17 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { getAllSemesterTasks, toggleTaskCompletion, getNextAction, isPrepWindowOpen } from "../../lib/tasks/taskHelpers";
+import { useCallback, useEffect, useState } from "react";
+import {
+  getParentTasks,
+  getAllSemesterTasks,
+  sortByEffortPriority,
+  getNextAction,
+  isPrepWindowOpen,
+  toggleTaskCompletion,
+  isMajorTask,
+} from "../../lib/tasks/taskHelpers";
 
-function IconFocus() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
+/**
+ * Focus Mode — distraction-free single-task view.
+ *
+ * Surfaces the highest-priority active task using the same effort-aware
+ * scoring as What Matters. For major tasks with open prep windows, it shows
+ * the next concrete action from the start plan. The goal is to answer:
+ * "If I can only do one thing right now, what should it be?"
+ */
 
 function formatDate(isoDate) {
   if (!isoDate) return "";
@@ -22,198 +30,173 @@ function formatDate(isoDate) {
   }).format(new Date(`${isoDate}T00:00:00`));
 }
 
-export default function CalmModePage() {
+function formatShortDate(isoDate) {
+  if (!isoDate) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${isoDate}T00:00:00`));
+}
+
+function DifficultyIndicator({ value }) {
+  if (!value) return null;
+  return (
+    <span className="focus-difficulty" aria-label={`Difficulty ${value} of 5`}>
+      {[1, 2, 3, 4, 5].map((dot) => (
+        <span
+          key={dot}
+          className={`focus-difficulty__dot${dot <= value ? " focus-difficulty__dot--filled" : ""}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+export default function FocusModePage() {
   const [loading, setLoading] = useState(true);
   const [task, setTask] = useState(null);
+  const [nextAction, setNextAction] = useState(null);
   const [completing, setCompleting] = useState(false);
 
-  async function loadMostUrgentTask() {
+  const loadTopTask = useCallback(async () => {
     setLoading(true);
-    const tasks = await getAllSemesterTasks();
-    
-    // Filter active tasks
-    let active = tasks.filter((t) => t.status !== "done");
 
-    if (active.length === 0) {
+    // Use parent tasks for major tasks (they carry milestone data),
+    // plus all tasks for the complete effort-priority picture
+    const [parentTasks, allTasks] = await Promise.all([
+      getParentTasks(),
+      getAllSemesterTasks(),
+    ]);
+
+    // Filter to active, non-milestone tasks and sort by effort priority
+    const active = allTasks
+      .filter((t) => t.status !== "done" && !t.isMilestone)
+      .slice(); // copy before sort
+
+    const sorted = sortByEffortPriority(active);
+    const top = sorted[0] || null;
+
+    if (top) {
+      // Find the parent version of this task if it has milestones
+      const parentVersion = parentTasks.find((p) => p.id === top.id);
+      const taskWithMilestones = parentVersion || top;
+      const action = taskWithMilestones.milestones
+        ? getNextAction(taskWithMilestones)
+        : null;
+      const prepOpen = isPrepWindowOpen(taskWithMilestones);
+
+      setTask(top);
+      setNextAction(action && prepOpen ? action : null);
+    } else {
       setTask(null);
-      setLoading(false);
-      return;
+      setNextAction(null);
     }
 
-    // Sort by urgency score descending. If tied, sort by date ascending.
-    active.sort((a, b) => {
-      const uA = a.urgency?.score ?? 0;
-      const uB = b.urgency?.score ?? 0;
-      if (uA !== uB) return uB - uA; // High score first
-      
-      // Fallback to active date
-      const dateA = a.bucket === "today" ? new Date().toISOString() : (a.dueDate || "9999-12-31");
-      const dateB = b.bucket === "today" ? new Date().toISOString() : (b.dueDate || "9999-12-31");
-      return new Date(dateA) - new Date(dateB);
-    });
-
-    setTask(active[0]);
     setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
-    loadMostUrgentTask();
-  }, []);
+    loadTopTask();
+  }, [loadTopTask]);
 
   async function handleMarkDone() {
     if (!task || completing) return;
     setCompleting(true);
-    
+
     await toggleTaskCompletion(task);
-    
-    // Load next task after a slight dealy for UX
+
+    // Brief pause for UX feedback before loading next task
     setTimeout(() => {
-      loadMostUrgentTask().finally(() => setCompleting(false));
+      loadTopTask().finally(() => setCompleting(false));
     }, 400);
   }
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", color: "var(--text-tertiary)" }}>
-        Focusing...
+      <div className="focus-shell">
+        <div className="focus-loading">Focusing…</div>
       </div>
     );
   }
 
   return (
-    <div style={{ 
-      minHeight: "100vh", 
-      display: "flex", 
-      flexDirection: "column", 
-      alignItems: "center", 
-      justifyContent: "center", 
-      background: "var(--bg)", 
-      padding: 40,
-      position: "relative",
-      color: "var(--text)"
-    }}>
-      <Link 
-        href="/dashboard" 
-        className="topbar__calm-link" 
-        style={{ 
-          position: "absolute", 
-          top: 32, 
-          left: 32,
-          padding: "0 16px",
-          background: "transparent",
-          border: "1px solid var(--border)"
-        }}
+    <div className="focus-shell">
+      <Link
+        href="/dashboard"
+        className="focus-exit"
+        aria-label="Exit Focus Mode"
       >
-        <span>← Exit Focus</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        <span>Exit Focus</span>
       </Link>
 
-      <div style={{ textAlign: "center", maxWidth: 700, width: "100%", animation: "fade-in 0.8s ease-out" }}>
+      <div className="focus-content">
         {!task ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ color: "var(--tag-green-text)", marginBottom: 24, opacity: 0.8 }}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-            </div>
-            <h1 style={{ fontSize: 32, fontWeight: 700, color: "var(--text)", marginBottom: 12, letterSpacing: "-0.02em" }}>Everything is captured.</h1>
-            <p style={{ color: "var(--text-tertiary)", fontSize: 16 }}>Your agenda is currently clear. Enjoy the quiet.</p>
+          <div className="focus-clear">
+            <svg className="focus-clear__icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            <h1 className="focus-clear__heading">Everything is captured.</h1>
+            <p className="focus-clear__body">
+              Your agenda is currently clear. Enjoy the quiet.
+            </p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: 8, 
-              fontSize: 12, 
-              textTransform: "uppercase", 
-              padding: "4px 12px",
-              background: "var(--bg-secondary)",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
-              letterSpacing: "0.08em", 
-              color: "var(--accent)", 
-              fontWeight: 700, 
-              marginBottom: 40,
-              opacity: 0.9
-            }}>
-              <IconFocus /> Current Priority
-            </div>
-            
-            <h1 style={{ 
-              fontSize: "clamp(32px, 5vw, 56px)", 
-              lineHeight: 1.05, 
-              fontWeight: 800, 
-              color: "var(--text)", 
-              marginBottom: 20, 
-              letterSpacing: "-0.03em",
-              maxWidth: "100%"
-            }}>
-              {task.title}
-            </h1>
-            
-            <div style={{ 
-              fontSize: 18, 
-              color: "var(--text-secondary)", 
-              marginBottom: 60,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8
-            }}>
-              <span>
-                {task.courseLabel && task.courseLabel !== "—" && (
-                  <span style={{ fontWeight: 600, color: "var(--text-tertiary)" }}>{task.courseLabel} · </span>
-                )}
-                {task.action ? task.action.label : "Primary objective"}
-              </span>
-              {task.action?.why && (
-                <span style={{ fontSize: 14, color: "var(--text-tertiary)", fontStyle: "italic" }}>
-                  &ldquo;{task.action.why.toLowerCase()}&rdquo;
-                </span>
-              )}
+          <div className="focus-task">
+            <div className="focus-task__eyebrow">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>Current Priority</span>
             </div>
 
-            <button 
-              className="btn-primary" 
-              style={{ 
-                fontSize: 15, 
-                fontWeight: 600,
-                padding: "0 40px", 
-                height: 52, 
-                borderRadius: 26, 
-                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
-                opacity: completing ? 0.6 : 1, 
-                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                transform: completing ? "scale(0.98)" : "scale(1)"
-              }}
+            <h1 className="focus-task__title">{task.title}</h1>
+
+            <div className="focus-task__meta">
+              {task.course && task.course !== "—" && (
+                <span className="focus-task__course">{task.course}</span>
+              )}
+              {task.type && task.type !== "other" && (
+                <span className="focus-task__type">
+                  {task.type.charAt(0).toUpperCase() + task.type.slice(1)}
+                </span>
+              )}
+              <DifficultyIndicator value={task.difficulty} />
+            </div>
+
+            {nextAction && (
+              <div className="focus-task__action">
+                <span className="focus-task__action-label">Next action</span>
+                <span className="focus-task__action-value">{nextAction.label}</span>
+                {nextAction.why && (
+                  <span className="focus-task__action-why">
+                    &ldquo;{nextAction.why}&rdquo;
+                  </span>
+                )}
+              </div>
+            )}
+
+            <button
+              className="focus-task__done-btn"
               onClick={handleMarkDone}
               disabled={completing}
             >
-              {completing ? "Verifying..." : "I finished this"}
+              {completing ? "Saving…" : "I finished this"}
             </button>
-            
+
             {task.dueDate && (
-              <div style={{ 
-                marginTop: 48, 
-                fontSize: 13, 
-                color: "var(--text-tertiary)",
-                padding: "4px 12px",
-                border: "1px solid var(--border)",
-                borderRadius: "6px"
-              }}>
+              <div className="focus-task__deadline">
                 Deadline: {formatDate(task.dueDate)}
               </div>
             )}
           </div>
         )}
       </div>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(20px); filter: blur(4px); }
-          to { opacity: 1; transform: translateY(0); filter: blur(0); }
-        }
-      `}} />
     </div>
   );
 }
