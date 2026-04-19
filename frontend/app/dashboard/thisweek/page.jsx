@@ -10,9 +10,29 @@ import {
   getEffortPriorityScore,
   getHeavyWeekSignal,
   sortByEffortPriority,
+  saveStartCommitment,
   toggleTaskCompletion,
   getAllSemesterTasks,
 } from "../../../lib/tasks/taskHelpers";
+
+function toDateTimeLocal(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${min}`;
+}
+
+function defaultSessionTime() {
+  const next = new Date();
+  next.setHours(next.getHours() + 2, 0, 0, 0);
+  if (next.getHours() > 21) {
+    next.setDate(next.getDate() + 1);
+    next.setHours(10, 0, 0, 0);
+  }
+  return toDateTimeLocal(next);
+}
 
 function formatDate(isoDate) {
   if (!isoDate) return "";
@@ -21,6 +41,19 @@ function formatDate(isoDate) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${isoDate}T00:00:00`));
+}
+
+function formatSessionTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function TaskCard({ task, onToggle }) {
@@ -56,7 +89,18 @@ function DifficultyMark({ value }) {
   return <span className="difficulty-mark" aria-label={`Difficulty ${value} of 5`}>{value}/5</span>;
 }
 
-function StartNowCard({ task, nextAction }) {
+function StartNowCard({ task, nextAction, onSaveCommitment }) {
+  const existing = task.startCommitment;
+  const [isEditingCommitment, setIsEditingCommitment] = useState(!existing);
+  const [scheduledAt, setScheduledAt] = useState(existing?.scheduledAt || defaultSessionTime());
+  const [place, setPlace] = useState(existing?.place || "");
+  const [firstStep, setFirstStep] = useState(existing?.firstStep || nextAction.label || "");
+
+  async function handleSave() {
+    await onSaveCommitment(task, { scheduledAt, place, firstStep });
+    setIsEditingCommitment(false);
+  }
+
   return (
     <div className="start-now-card">
       <div className="start-now-card__head">
@@ -76,6 +120,48 @@ function StartNowCard({ task, nextAction }) {
       <div className="start-now-card__due">
         Due {formatDate(task.dueDate)}
       </div>
+
+      {existing && !isEditingCommitment ? (
+        <div className="start-now-card__commitment">
+          <div>
+            <span className="start-now-card__commitment-label">Planned start</span>
+            <strong>{formatSessionTime(existing.scheduledAt) || "Time not set"}</strong>
+            {(existing.place || existing.firstStep) && (
+              <span>{[existing.place, existing.firstStep].filter(Boolean).join(" · ")}</span>
+            )}
+          </div>
+          <button type="button" className="start-now-card__edit" onClick={() => setIsEditingCommitment(true)}>
+            Change
+          </button>
+        </div>
+      ) : (
+        <div className="start-now-card__commitment-form">
+          <div className="start-now-card__form-row">
+            <label className="start-now-card__field">
+              <span>When</span>
+              <input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} />
+            </label>
+            <label className="start-now-card__field">
+              <span>Where</span>
+              <input type="text" value={place} onChange={(event) => setPlace(event.target.value)} placeholder="Library, desk, cafe" />
+            </label>
+          </div>
+          <label className="start-now-card__field">
+            <span>First move</span>
+            <input type="text" value={firstStep} onChange={(event) => setFirstStep(event.target.value)} placeholder="Open rubric, outline first section" />
+          </label>
+          <div className="start-now-card__form-actions">
+            {existing && (
+              <button type="button" className="btn-ghost" onClick={() => setIsEditingCommitment(false)}>
+                Cancel
+              </button>
+            )}
+            <button type="button" className="btn-primary" onClick={handleSave}>
+              Save start plan
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -158,6 +244,11 @@ export default function WhatMattersPage() {
     loadTasks();
   }
 
+  async function handleSaveCommitment(task, commitment) {
+    await saveStartCommitment(task, commitment);
+    loadTasks();
+  }
+
   if (loading) {
     return (
       <>
@@ -210,7 +301,7 @@ export default function WhatMattersPage() {
           </div>
           <div className="start-now-section__grid">
             {startNowItems.map(({ task, nextAction }) => (
-              <StartNowCard key={task.id} task={task} nextAction={nextAction} />
+              <StartNowCard key={task.id} task={task} nextAction={nextAction} onSaveCommitment={handleSaveCommitment} />
             ))}
           </div>
         </div>

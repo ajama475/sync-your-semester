@@ -201,6 +201,22 @@ function effortWeight(task) {
   return difficulty;
 }
 
+function normalizeStartCommitment(commitment) {
+  if (!commitment) return null;
+  const scheduledAt = typeof commitment.scheduledAt === "string" ? commitment.scheduledAt : "";
+  const place = typeof commitment.place === "string" ? commitment.place.trim() : "";
+  const firstStep = typeof commitment.firstStep === "string" ? commitment.firstStep.trim() : "";
+
+  if (!scheduledAt && !place && !firstStep) return null;
+
+  return {
+    scheduledAt,
+    place,
+    firstStep,
+    updatedAt: Date.now(),
+  };
+}
+
 /** Returns true for task types that deserve Start Plan or heavy-week treatment. */
 export function isMajorTask(task) {
   return MAJOR_TASK_TYPES.has(task?.type) || (task?.type === "assignment" && (task?.difficulty ?? 0) >= 4);
@@ -435,6 +451,7 @@ export async function getAllSemesterTasks() {
         milestones: item.milestones || null,
         startByDate: item.startByDate || null,
         milestonesCustomized: item.milestonesCustomized || false,
+        startCommitment: item.startCommitment || null,
       }))
   );
 
@@ -509,6 +526,7 @@ export async function getParentTasks() {
         milestones: item.milestones || null,
         startByDate: item.startByDate || null,
         milestonesCustomized: item.milestonesCustomized || false,
+        startCommitment: item.startCommitment || null,
       }))
   );
 
@@ -619,6 +637,7 @@ export async function createTask(taskData) {
     milestones: milestones.length > 0 ? milestones : null,
     startByDate: startByDate,
     milestonesCustomized: false,
+    startCommitment: null,
     createdAt: Date.now(),
   };
   await putTask(task);
@@ -672,6 +691,35 @@ export async function updateTask(taskId, taskData) {
       updatedAt: Date.now(),
     };
   });
+}
+
+/**
+ * Saves the concrete "when/where/first move" commitment attached to a Start
+ * Plan task. This is deliberately separate from milestones: milestones say
+ * what should happen; the commitment captures the student's next real session.
+ */
+export async function saveStartCommitment(task, commitment) {
+  const normalized = normalizeStartCommitment(commitment);
+
+  if (task.source === "syllabus" && task.recordId && task.taskId) {
+    await patchSyllabusRecord(task.recordId, (record) => ({
+      ...record,
+      reviewItems: (record.reviewItems || []).map((item) =>
+        item.id === task.taskId
+          ? { ...item, startCommitment: normalized }
+          : item
+      ),
+    }));
+    return normalized;
+  }
+
+  const taskId = task.isOccurrence && task.parentId ? task.parentId : task.id;
+  await patchTask(taskId, (existing) => ({
+    ...existing,
+    startCommitment: normalized,
+    updatedAt: Date.now(),
+  }));
+  return normalized;
 }
 
 /**
