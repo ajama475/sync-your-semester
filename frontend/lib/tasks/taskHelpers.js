@@ -149,6 +149,10 @@ const MILESTONE_ELIGIBLE_TYPES = new Set([
   "exam", "midterm", "final", "project", "essay", "assignment", "presentation",
 ]);
 
+const MAJOR_TASK_TYPES = new Set([
+  "exam", "midterm", "final", "project", "essay", "presentation",
+]);
+
 const MILESTONE_TEMPLATES = {
   exam:         [{ label: "Start review",        offset: 0.75, why: "gives you time to identify gaps" },
                  { label: "Deep review",         offset: 0.4,  why: "helps avoid cramming" },
@@ -179,6 +183,29 @@ function shouldGenerateMilestones(type, difficulty) {
   return true;
 }
 
+function daysUntilDate(dueDateISO) {
+  if (!dueDateISO) return null;
+  const target = toLocalMidnight(dueDateISO);
+  if (!isValidDate(target)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function effortWeight(task) {
+  const difficulty = Number(task?.difficulty) || 0;
+  if (task?.type === "final") return Math.max(difficulty, 5);
+  if (task?.type === "exam" || task?.type === "midterm") return Math.max(difficulty, 5);
+  if (MAJOR_TASK_TYPES.has(task?.type)) return Math.max(difficulty, 4);
+  if (task?.type === "assignment" && difficulty >= 4) return difficulty;
+  return difficulty;
+}
+
+/** Returns true for task types that deserve Start Plan or heavy-week treatment. */
+export function isMajorTask(task) {
+  return MAJOR_TASK_TYPES.has(task?.type) || (task?.type === "assignment" && (task?.difficulty ?? 0) >= 4);
+}
+
 /**
  * Returns true when a task's Start Plan can be safely regenerated from task
  * fields. Once a student edits or deletes a prep milestone, we preserve their
@@ -203,6 +230,88 @@ export function getStartByDateFromMilestones(milestones) {
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
   return dates[0] || null;
+}
+
+/**
+ * Combines due date, task effort, major-task status, and open Start Plan state
+ * into a sortable score. It keeps What Matters from over-prioritizing small
+ * near-term work while hiding large tasks that need attention earlier.
+ */
+export function getEffortPriorityScore(task) {
+  if (!task || task.status === "done") return Number.NEGATIVE_INFINITY;
+  const daysUntil = daysUntilDate(task.dueDate);
+  const effort = effortWeight(task);
+  let score = effort * 10;
+
+  if (daysUntil === null) {
+    score += 0;
+  } else if (daysUntil < 0) {
+    score += 100;
+  } else if (daysUntil === 0) {
+    score += 85;
+  } else {
+    score += Math.max(0, 60 - daysUntil * 4);
+  }
+
+  if (isMajorTask(task)) score += 14;
+  if (isPrepWindowOpen(task)) score += 16;
+  return score;
+}
+
+/**
+ * Sorts visible planning lists by effort-aware urgency, then falls back to due
+ * date and title for stable scanning.
+ */
+export function sortByEffortPriority(tasks) {
+  return [...tasks].sort((a, b) => {
+    const scoreDiff = getEffortPriorityScore(b) - getEffortPriorityScore(a);
+    if (scoreDiff !== 0) return scoreDiff;
+    const dateA = a.dueDate || "";
+    const dateB = b.dueDate || "";
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    return (a.title || "").localeCompare(b.title || "");
+  });
+}
+
+/**
+ * Finds a calm heavy-week warning from parent tasks only. The threshold is high
+ * enough to avoid noise: either several major items converge or the total
+ * effort is clearly above a normal week.
+ */
+export function getHeavyWeekSignal(tasks, horizonDays = 14) {
+  const candidates = (tasks || [])
+    .filter((task) => {
+      if (!task || task.status === "done" || task.isMilestone || !task.dueDate) return false;
+      const daysUntil = daysUntilDate(task.dueDate);
+      return daysUntil !== null &&
+        daysUntil >= 0 &&
+        daysUntil <= horizonDays &&
+        (isMajorTask(task) || effortWeight(task) >= 4);
+    })
+    .map((task) => ({
+      task,
+      daysUntil: daysUntilDate(task.dueDate),
+      effort: effortWeight(task),
+    }))
+    .sort((a, b) => a.daysUntil - b.daysUntil || b.effort - a.effort);
+
+  const effortTotal = candidates.reduce((sum, item) => sum + item.effort, 0);
+  if (candidates.length < 3 && effortTotal < 10) return null;
+
+  const startCandidate =
+    candidates.find(({ task }) => {
+      const action = getNextAction(task);
+      return isPrepWindowOpen(task) && action?.active;
+    }) || candidates[0];
+
+  return {
+    count: candidates.length,
+    effortTotal,
+    windowLabel: candidates.some((item) => item.daysUntil <= 7) ? "the next 7 days" : "the next 14 days",
+    items: candidates.slice(0, 4).map((item) => item.task),
+    suggestionTask: startCandidate?.task || null,
+    suggestionAction: startCandidate ? getNextAction(startCandidate.task) : null,
+  };
 }
 
 /**

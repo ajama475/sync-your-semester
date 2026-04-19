@@ -3878,6 +3878,102 @@ a {
   color: var(--text-tertiary);
 }
 
+.heavy-week-card {
+  margin: 12px 40px 4px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(240px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tag-orange-text);
+  border-radius: var(--radius-lg);
+}
+
+.heavy-week-card__eyebrow {
+  display: inline-flex;
+  margin-bottom: 5px;
+  color: var(--tag-orange-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.heavy-week-card__title {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.heavy-week-card__suggestion {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.heavy-week-card__suggestion strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.heavy-week-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.heavy-week-card__item {
+  min-height: 42px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.heavy-week-card__item-title,
+.heavy-week-card__item-date {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heavy-week-card__item-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.heavy-week-card__item-date {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.difficulty-mark {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--tag-orange-bg);
+  color: var(--tag-orange-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 /* Completed row treatment */
 .db-table-row--done {
   opacity: 0.45;
@@ -4333,6 +4429,11 @@ a {
 
   .start-now-section {
     padding: 0 20px;
+  }
+
+  .heavy-week-card {
+    margin: 12px 20px 4px;
+    grid-template-columns: 1fr;
   }
 
   .lab-workspace {

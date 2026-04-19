@@ -7,6 +7,9 @@ import {
   getTaskUrgency,
   getNextAction,
   isPrepWindowOpen,
+  getEffortPriorityScore,
+  getHeavyWeekSignal,
+  sortByEffortPriority,
   toggleTaskCompletion,
   getAllSemesterTasks,
 } from "../../../lib/tasks/taskHelpers";
@@ -48,6 +51,11 @@ function TaskCard({ task, onToggle }) {
   );
 }
 
+function DifficultyMark({ value }) {
+  if (!value) return null;
+  return <span className="difficulty-mark" aria-label={`Difficulty ${value} of 5`}>{value}/5</span>;
+}
+
 function StartNowCard({ task, nextAction }) {
   return (
     <div className="start-now-card">
@@ -69,6 +77,40 @@ function StartNowCard({ task, nextAction }) {
         Due {formatDate(task.dueDate)}
       </div>
     </div>
+  );
+}
+
+function HeavyWeekCard({ signal }) {
+  if (!signal) return null;
+
+  const suggestion = signal.suggestionTask;
+  const actionText = signal.suggestionAction?.label;
+
+  return (
+    <section className="heavy-week-card" aria-label="Heavy week ahead">
+      <div className="heavy-week-card__copy">
+        <span className="heavy-week-card__eyebrow">Heavy week ahead</span>
+        <h2 className="heavy-week-card__title">
+          {signal.count} major item{signal.count !== 1 ? "s" : ""} in {signal.windowLabel}
+        </h2>
+        {suggestion && (
+          <p className="heavy-week-card__suggestion">
+            Consider starting <strong>{suggestion.title}</strong>{actionText ? `: ${actionText}` : ""}.
+          </p>
+        )}
+      </div>
+      <div className="heavy-week-card__list">
+        {signal.items.map((task) => (
+          <div key={task.id} className="heavy-week-card__item">
+            <div>
+              <span className="heavy-week-card__item-title">{task.title}</span>
+              <span className="heavy-week-card__item-date">{formatDate(task.dueDate)}</span>
+            </div>
+            <DifficultyMark value={task.difficulty} />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -137,6 +179,9 @@ export default function WhatMattersPage() {
       startNowItems.push({ task, nextAction: action });
     }
   }
+  startNowItems.sort((a, b) => getEffortPriorityScore(b.task) - getEffortPriorityScore(a.task));
+
+  const heavyWeek = getHeavyWeekSignal(parentTasks);
 
   // Standard buckets from all tasks (excluding milestone rows for cleaner display)
   const buckets = { Overdue: [], Today: [], "This Week": [], "Next Week": [] };
@@ -146,6 +191,9 @@ export default function WhatMattersPage() {
     if (bucket !== "Done" && bucket !== "Later" && buckets[bucket]) {
       buckets[bucket].push(task);
     }
+  }
+  for (const key of Object.keys(buckets)) {
+    buckets[key] = sortByEffortPriority(buckets[key]);
   }
 
   return (
@@ -167,6 +215,8 @@ export default function WhatMattersPage() {
           </div>
         </div>
       )}
+
+      <HeavyWeekCard signal={heavyWeek} />
 
       <div className="horizon-board">
         {buckets.Overdue.length > 0 && (
