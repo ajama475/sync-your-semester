@@ -545,7 +545,12 @@ a {
 .dashboard {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 250px 1fr;
+  transition: grid-template-columns 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dashboard--collapsed {
+  grid-template-columns: 0px 1fr;
 }
 
 /* ---- Sidebar ---- */
@@ -621,7 +626,7 @@ a {
 .sidebar-toggle-btn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
@@ -749,7 +754,7 @@ a {
 .topbar__restore-btn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text-secondary);
