@@ -14,6 +14,7 @@ import { extractCourseCode, stripExtension } from "../../../lib/tasks/taskHelper
 const SETUP_STORAGE_KEY = "sys-semester-setup";
 const MAX_DOCUMENTS = 50;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_SYLLABUS_BYTES = 180 * 1024 * 1024;
 
 /* ---- Premium Icons ---- */
 
@@ -110,6 +111,36 @@ function storageErrorMessage(error) {
   return "The PDF could not be processed. Try a selectable-text syllabus PDF.";
 }
 
+function totalStoredSyllabusBytes(files) {
+  return (files || []).reduce((total, file) => total + (Number(file.size) || 0), 0);
+}
+
+/**
+ * Browser quota differs widely by device and privacy settings. This check keeps
+ * the local-first PDF cache from failing deep in the upload flow, while the
+ * fixed product cap prevents a few large syllabi from crowding out the term.
+ */
+async function getStorageBudgetMessage(incomingBytes, projectedBytes) {
+  if (projectedBytes + incomingBytes > MAX_TOTAL_SYLLABUS_BYTES) {
+    return `Local syllabus storage is capped at ${formatFileSize(MAX_TOTAL_SYLLABUS_BYTES)}. Remove an older PDF before adding this one.`;
+  }
+
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return null;
+
+  try {
+    const estimate = await navigator.storage.estimate();
+    const quota = Number(estimate.quota) || 0;
+    const usage = Number(estimate.usage) || 0;
+    if (quota > 0 && usage + incomingBytes * 1.4 > quota * 0.85) {
+      return "Browser storage is nearly full. Remove an older syllabus or choose a smaller PDF before adding this one.";
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function findBestCourseMatch(filename, courses) {
   if (!filename || !courses || courses.length === 0) return "";
   const normalizedFile = filename.toLowerCase().replace(/[._-\s]/g, "");
@@ -160,6 +191,7 @@ export default function PremiumSyllabusLab() {
     const accepted = Array.from(fileList || []).filter(isPdfFile);
     const slotsRemaining = Math.max(0, MAX_DOCUMENTS - files.length);
     const nextFiles = accepted.slice(0, slotsRemaining);
+    let projectedStoredBytes = totalStoredSyllabusBytes(files);
 
     for (const file of nextFiles) {
       const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -174,6 +206,17 @@ export default function PremiumSyllabusLab() {
         } : f));
         continue;
       }
+
+      const budgetMessage = await getStorageBudgetMessage(file.size, projectedStoredBytes);
+      if (budgetMessage) {
+        setFiles(prev => prev.map(f => f.id === id ? {
+          ...f,
+          status: "error",
+          message: budgetMessage
+        } : f));
+        continue;
+      }
+      projectedStoredBytes += file.size;
 
       try {
         const matchedCourseId = findBestCourseMatch(file.name, courses);
