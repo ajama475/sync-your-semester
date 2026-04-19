@@ -211,8 +211,20 @@ export default function SemesterSetupClient() {
     router.push("/dashboard");
   }
 
-  // Don't render anything until hydration check is done (prevents setup flash)
-  if (!hydrated) return null;
+  // Don't render full setup until hydration check is done
+  if (!hydrated) {
+    return (
+      <main className="setup-page">
+        <div className="setup-container">
+          <div className="setup-brand">
+            <span className="setup-brand__icon"><BrandIcon /></span>
+            <span className="setup-brand__name">Sync Your Semester</span>
+          </div>
+          <p style={{ color: "var(--text-tertiary)", marginTop: 40 }}>Optimizing workspace...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="setup-page">

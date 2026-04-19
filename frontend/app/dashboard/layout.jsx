@@ -251,8 +251,13 @@ export default function DashboardLayout({ children }) {
     try { localStorage.setItem("sys-sidebar-collapsed", String(next)); } catch {}
   }
 
-  if (setupValid === null) return null;
-  if (setupValid === false) return null;
+  if (setupValid === null || setupValid === false) {
+    return (
+      <div className="dashboard" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-tertiary)" }}>Preparing your semester...</p>
+      </div>
+    );
+  }
 
   function isActive(href) {
     if (href === "/dashboard") return pathname === "/dashboard";

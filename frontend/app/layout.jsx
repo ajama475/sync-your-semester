@@ -42,13 +42,12 @@ export default function RootLayout({ children }) {
                 } catch(e) {}
               })();
 
+              // Force unregister broken service workers from previous PWA attempts
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('SW registered: ', registration.scope);
-                  }, function(err) {
-                    console.log('SW registration failed: ', err);
-                  });
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  for(let registration of registrations) {
+                    registration.unregister();
+                  }
                 });
               }
             `,
